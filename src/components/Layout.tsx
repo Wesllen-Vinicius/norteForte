@@ -1,3 +1,4 @@
+// src/components/Layout.tsx
 import Header from './Header'
 import Sidebar from './Sidebar'
 
@@ -10,7 +11,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <Sidebar />
 
         <main className="flex-1 w-full px-6 py-6 overflow-auto">
-          {children}
+          {children} {/* Este é o local onde o conteúdo das páginas é renderizado */}
         </main>
       </div>
     </div>

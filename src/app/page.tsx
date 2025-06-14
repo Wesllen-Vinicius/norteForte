@@ -2,11 +2,5 @@
 import { redirect } from 'next/navigation'
 
 export default function Home() {
-  const isAuthenticated = false
-
-  if (isAuthenticated) {
-    redirect('/dashboard')
-  } else {
-    redirect('/login')
-  }
+  redirect('/dashboard') // Redireciona para o dashboard por padrão
 }

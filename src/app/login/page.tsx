@@ -1,15 +1,32 @@
+// src/app/login/page.tsx
 'use client'
 
 import LoginFooter from '@/components/LoginFooter'
 import { useState } from 'react'
+import { auth } from '@/lib/firebase' // Importe a instância de autenticação do Firebase
+import { signInWithEmailAndPassword } from 'firebase/auth' // Importe a função de login
+import { useAuthStore } from '@/store/authStore' // Importe sua store Zustand
+import { useRouter } from 'next/navigation' // Importe useRouter para redirecionamento
+import { useFeedbackStore } from '@/store/feedbackStore' // Importe sua store de feedback
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+  const setUser = useAuthStore((state) => state.setUser) // Obtenha a função setUser da sua store
+  const setFeedback = useFeedbackStore((state) => state.setFeedback); // Obtenha a função setFeedback
+  const router = useRouter() // Inicialize o router
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log({ email, senha })
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, senha)
+      setUser(userCredential.user) // Atualiza o estado do Zustand com o usuário logado
+      setFeedback('Login realizado com sucesso!', 'success'); // Exibe mensagem de sucesso
+      router.push('/dashboard') // Redireciona para o dashboard após o login
+    } catch (error: any) {
+      console.error("Erro ao fazer login:", error.message)
+      setFeedback(`Erro ao fazer login: ${error.message}`, 'error'); // Exibe mensagem de erro
+    }
   }
 
   return (
