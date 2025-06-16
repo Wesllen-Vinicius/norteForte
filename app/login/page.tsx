@@ -1,6 +1,6 @@
-// app/login/page.tsx
 "use client"
 
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { IconBrandGoogle } from "@tabler/icons-react";
 
+import { useAuthStore } from "@/store/auth.store";
 import { loginSchema, signInWithEmail, signInWithGoogle } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,10 +21,18 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
+    const { user, isLoading } = useAuthStore(); // Obtenha o estado do usuário
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },
     });
+
+    // Efeito para redirecionar se o usuário já estiver logado
+    useEffect(() => {
+        if (!isLoading && user) {
+            router.push('/dashboard');
+        }
+    }, [user, isLoading, router]);
 
     const onSubmit = async (values: LoginFormValues) => {
         try {
@@ -45,6 +54,16 @@ export default function LoginPage() {
         }
     };
 
+    // Enquanto o estado de auth está sendo verificado, não mostra o formulário
+    if (isLoading) {
+        return (
+             <div className="flex h-screen w-full items-center justify-center">
+                Carregando...
+            </div>
+        );
+    }
+
+    // Se não estiver carregando e o usuário não estiver logado, mostra a página de login
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md">

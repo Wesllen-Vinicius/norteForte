@@ -1,15 +1,19 @@
 "use client"
 
+import Link from "next/link";
 import * as React from "react"
 import {
-  IconDashboard,
-  IconInnerShadowTop,
-  IconUsers,
-  IconUserShield,
-  IconPackages,
   IconArchive,
+  IconChartBar,
   IconClipboardPlus,
-  IconReportAnalytics
+  IconDashboard,
+  IconFolder,
+  IconInnerShadowTop,
+  IconMeat,
+  IconPackages,
+  IconReportAnalytics,
+  IconUserShield,
+  IconUsers,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -25,11 +29,6 @@ import {
 } from "@/components/ui/sidebar"
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
       title: "Dashboard",
@@ -40,6 +39,11 @@ const data = {
       title: "Producao",
       url: "/dashboard/producao",
       icon: IconClipboardPlus,
+    },
+    {
+      title: "Abates",
+      url: "/dashboard/abates",
+      icon: IconMeat,
     },
     {
       title: "Funcionarios",
@@ -79,10 +83,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <a href="#">
+              <Link href="/dashboard">
                 <IconInnerShadowTop className="!size-5" />
                 <span className="text-base font-semibold">AshesBorn</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -91,8 +95,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarFooter>
-      <NavUser />
-    </SidebarFooter>
+        <NavUser />
+      </SidebarFooter>
     </Sidebar>
   )
 }
