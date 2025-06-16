@@ -1,7 +1,5 @@
 "use client"
 
-import { z } from "zod"
-import { useForm } from "react-hook-form"
 import {
   FormField,
   FormItem,
@@ -20,8 +18,11 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { GenericForm } from "@/components/generic-form"
+import { CenteredLayout } from "@/components/centered-layout"
+import { z } from "zod"
+import { useForm } from "react-hook-form"
 
-// Dados simulados de cargos (vindo de outra tela de cadastro de cargos)
+
 const cargosDisponiveis = [
   { id: "1", nome: "Gerente de Projetos" },
   { id: "2", nome: "Desenvolvedor Frontend" },
@@ -44,8 +45,6 @@ export default function CadastrarFuncionarioPage() {
 
   const onSubmit = (values: FuncionarioFormValues) => {
     console.log("Dados do funcionário:", values);
-    // Chamada da função 'toast' para exibir a notificação.
-    // Esta função é a maneira padrão de disparar uma notificação no 'sonner'.
     toast("Funcionário Cadastrado!", {
       description: (
         <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
@@ -63,7 +62,7 @@ export default function CadastrarFuncionarioPage() {
   };
 
   return (
-    <div className="container mx-auto p-4">
+    <CenteredLayout>
       <h1 className="text-2xl font-bold mb-6">Cadastro de Funcionário</h1>
       <GenericForm
         schema={funcionarioSchema}
@@ -146,6 +145,6 @@ export default function CadastrarFuncionarioPage() {
           )}
         />
       </GenericForm>
-    </div>
+    </CenteredLayout>
   );
 }
