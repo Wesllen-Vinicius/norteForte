@@ -1,150 +1,195 @@
+// app/dashboard/funcionarios/page.tsx
 "use client"
 
-import {
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormDescription,
-  FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { toast } from "sonner"
-import { GenericForm } from "@/components/generic-form"
-import { CenteredLayout } from "@/components/centered-layout"
-import { z } from "zod"
-import { useForm } from "react-hook-form"
+import { useEffect, useState, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ColumnDef } from "@tanstack/react-table";
+import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { toast } from "sonner";
+import { z } from "zod";
+import { CenteredLayout } from "@/components/centered-layout";
+import { GenericForm } from "@/components/generic-form";
+import { GenericTable } from "@/components/generic-table";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-
-const cargosDisponiveis = [
-  { id: "1", nome: "Gerente de Projetos" },
-  { id: "2", nome: "Desenvolvedor Frontend" },
-  { id: "3", nome: "Desenvolvedor Backend" },
-  { id: "4", nome: "Designer UI/UX" },
-  { id: "5", nome: "Analista de Qualidade" },
-];
-
-const funcionarioSchema = z.object({
-  nome: z.string().min(1, { message: "O nome é obrigatório." }),
-  email: z.string().email({ message: "E-mail inválido." }).optional().or(z.literal("")),
-  celular: z.string().optional().or(z.literal("")),
-  cargoId: z.string().min(1, { message: "Selecione um cargo." }),
-});
+import { Funcionario, funcionarioSchema, addFuncionario, subscribeToFuncionarios, updateFuncionario, deleteFuncionario } from "@/lib/services/funcionarios.services";
+import { Cargo, subscribeToCargos } from "@/lib/services/cargos.services";
 
 type FuncionarioFormValues = z.infer<typeof funcionarioSchema>;
 
-export default function CadastrarFuncionarioPage() {
-  const form = useForm<FuncionarioFormValues>();
+export default function FuncionariosPage() {
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [cargos, setCargos] = useState<Cargo[]>([]);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
 
-  const onSubmit = (values: FuncionarioFormValues) => {
-    console.log("Dados do funcionário:", values);
-    toast("Funcionário Cadastrado!", {
-      description: (
-        <pre className="mt-2 w-[340px] rounded-md bg-slate-950 p-4">
-          <code className="text-white">{JSON.stringify(values, null, 2)}</code>
-        </pre>
-      ),
-    });
+  const form = useForm<FuncionarioFormValues>({
+    resolver: zodResolver(funcionarioSchema),
+    defaultValues: { id: "", nome: "", email: "", celular: "", cargoId: "" },
+  });
+
+  // Efeito para buscar dados do Firestore em tempo real
+  useEffect(() => {
+    const unsubscribeFuncionarios = subscribeToFuncionarios(setFuncionarios);
+    const unsubscribeCargos = subscribeToCargos(setCargos);
+
+    return () => {
+      unsubscribeFuncionarios();
+      unsubscribeCargos();
+    };
+  }, []);
+
+  const handleEdit = (funcionario: Funcionario) => {
+    form.reset(funcionario);
+    setIsEditing(true);
   };
 
-  const defaultValues: FuncionarioFormValues = {
-    nome: "",
-    email: "",
-    celular: "",
-    cargoId: "",
+  const handleDelete = async (id: string) => {
+    if(!confirm("Tem certeza que deseja remover este funcionário?")) return;
+    try {
+      await deleteFuncionario(id);
+      toast.success("Funcionário removido com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao remover o funcionário.");
+    }
   };
+
+  const resetForm = () => {
+    form.reset({ id: "", nome: "", email: "", celular: "", cargoId: "" });
+    setIsEditing(false);
+  };
+
+  const onSubmit = async (values: FuncionarioFormValues) => {
+    try {
+      const { id, ...data } = values;
+      if (isEditing && id) {
+        await updateFuncionario(id, data);
+        toast.success(`Dados de "${data.nome}" atualizados com sucesso!`);
+      } else {
+        await addFuncionario(data);
+        toast.success(`Funcionário "${data.nome}" cadastrado com sucesso!`);
+      }
+      resetForm();
+    } catch (error) {
+      toast.error("Ocorreu um erro ao salvar o funcionário.");
+    }
+  };
+
+  // Mapeamento de ID do cargo para nome do cargo para uso na tabela
+  const cargoMap = useMemo(() => {
+    return cargos.reduce((acc, cargo) => {
+      if (cargo.id) {
+        acc[cargo.id] = cargo.nome;
+      }
+      return acc;
+    }, {} as Record<string, string>);
+  }, [cargos]);
+
+
+  const columns: ColumnDef<Funcionario>[] = [
+    {
+      accessorKey: "nome",
+      header: "Nome",
+    },
+    {
+      accessorKey: "email",
+      header: "E-mail",
+    },
+    {
+      accessorKey: "cargoId",
+      header: "Cargo",
+      cell: ({ row }) => cargoMap[row.original.cargoId] || "N/A",
+    },
+    {
+      id: "actions",
+      header: () => <div className="text-right">Ações</div>,
+      cell: ({ row }) => {
+        const funcionario = row.original;
+        return (
+          <div className="text-right">
+            <Button variant="ghost" size="icon" onClick={() => handleEdit(funcionario)}>
+              <IconPencil className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(funcionario.id!)}>
+              <IconTrash className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <CenteredLayout>
-      <h1 className="text-2xl font-bold mb-6">Cadastro de Funcionário</h1>
-      <GenericForm
-        schema={funcionarioSchema}
-        onSubmit={onSubmit}
-        defaultValues={defaultValues}
-      >
-        <FormField
-          control={form.control}
-          name="nome"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Nome</FormLabel>
-              <FormControl>
-                <Input placeholder="Nome completo do funcionário" {...field} />
-              </FormControl>
-              <FormDescription>
-                Nome completo do funcionário.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>E-mail</FormLabel>
-              <FormControl>
-                <Input placeholder="email@exemplo.com" {...field} />
-              </FormControl>
-              <FormDescription>
-                E-mail para contato (opcional).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="celular"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Celular</FormLabel>
-              <FormControl>
-                <Input placeholder="(XX) XXXXX-XXXX" {...field} />
-              </FormControl>
-              <FormDescription>
-                Número de celular (opcional).
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="cargoId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Cargo</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um cargo" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {cargosDisponiveis.map((cargo) => (
-                    <SelectItem key={cargo.id} value={cargo.id}>
-                      {cargo.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                Cargo do funcionário na empresa.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </GenericForm>
+      <div className="space-y-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>{isEditing ? "Editar Funcionário" : "Novo Funcionário"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <GenericForm schema={funcionarioSchema} onSubmit={onSubmit} formId="funcionario-form" form={form}>
+              <FormField name="nome" control={form.control} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome</FormLabel>
+                  <FormControl><Input placeholder="Nome completo" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField name="email" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>E-mail</FormLabel>
+                    <FormControl><Input placeholder="email@exemplo.com" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField name="celular" control={form.control} render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Celular</FormLabel>
+                    <FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+              <FormField name="cargoId" control={form.control} render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cargo</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um cargo" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {cargos.map((cargo) => (
+                        <SelectItem key={cargo.id} value={cargo.id!}>
+                          {cargo.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex justify-end gap-2 pt-4">
+                {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
+                <Button type="submit" form="funcionario-form">{isEditing ? "Salvar Alterações" : "Cadastrar Funcionário"}</Button>
+              </div>
+            </GenericForm>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Funcionários Cadastrados</CardTitle></CardHeader>
+          <CardContent>
+            <GenericTable columns={columns} data={funcionarios} />
+          </CardContent>
+        </Card>
+      </div>
     </CenteredLayout>
   );
 }

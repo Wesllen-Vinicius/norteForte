@@ -2,11 +2,14 @@
 
 import * as React from "react"
 import {
-  IconChartBar,
   IconDashboard,
-  IconFolder,
   IconInnerShadowTop,
   IconUsers,
+  IconUserShield,
+  IconPackages,
+  IconArchive,
+  IconClipboardPlus,
+  IconReportAnalytics
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -35,23 +38,33 @@ const data = {
     },
     {
       title: "Producao",
-      url: "/producao",
-      icon: IconChartBar,
+      url: "/dashboard/producao",
+      icon: IconClipboardPlus,
     },
     {
       title: "Funcionarios",
       url: "/dashboard/funcionarios",
-      icon: IconChartBar,
+      icon: IconUsers,
+    },
+    {
+      title: "Cargos",
+      url: "/dashboard/cargos",
+      icon: IconUserShield,
     },
     {
       title: "Produtos",
-      url: "/produtos",
-      icon: IconFolder,
+      url: "/dashboard/produtos",
+      icon: IconPackages,
     },
     {
       title: "Estoque",
-      url: "/estoque",
-      icon: IconUsers,
+      url: "/dashboard/estoque",
+      icon: IconArchive,
+    },
+    {
+      title: "Relatórios",
+      url: "/dashboard/relatorios",
+      icon: IconReportAnalytics,
     },
   ],
 }
@@ -78,8 +91,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
+      <NavUser />
+    </SidebarFooter>
     </Sidebar>
   )
 }
