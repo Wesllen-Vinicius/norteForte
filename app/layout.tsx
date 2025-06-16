@@ -1,4 +1,4 @@
-// src/app/.tsx
+// src/app/layout.tsx
 import { ThemeProvider } from '@/components/theme-provider';
 import './globals.css';
 import { Toaster } from 'sonner';
