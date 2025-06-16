@@ -1,4 +1,3 @@
-// app/dashboard/abates/page.tsx
 "use client"
 
 import { useEffect, useState } from "react";
@@ -9,12 +8,10 @@ import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
-
-import { CenteredLayout } from "@/components/centered-layout";
+import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/date-picker";
@@ -88,49 +85,42 @@ export default function AbatesPage() {
         },
     ];
 
-    return (
-        <CenteredLayout>
-            <div className="space-y-8">
-                <Card>
-                    <CardHeader><CardTitle>{isEditing ? "Editar Registro de Abate" : "Novo Registro de Abate"}</CardTitle></CardHeader>
-                    <CardContent>
-                        <GenericForm schema={abateSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <FormField name="data" control={form.control} render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                        <FormLabel>Data do Abate</FormLabel>
-                                        <FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField name="total" control={form.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Abate Total</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                                )} />
-                            </div>
-                            <div className="grid md:grid-cols-3 gap-4">
-                                <FormField name="boi" control={form.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Boi</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                                )} />
-                                <FormField name="vaca" control={form.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Vaca</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                                )} />
-                                <FormField name="condenado" control={form.control} render={({ field }) => (
-                                    <FormItem><FormLabel>Condenado</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                                )} />
-                            </div>
-                            <div className="flex justify-end gap-2 pt-4">
-                                {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                                <Button type="submit" form="abate-form">{isEditing ? "Salvar Alterações" : "Registrar Abate"}</Button>
-                            </div>
-                        </GenericForm>
-                    </CardContent>
-                </Card>
+    const formContent = (
+      <GenericForm schema={abateSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
+          <div className="space-y-4">
+              <FormField name="data" control={form.control} render={({ field }) => (
+                  <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField name="total" control={form.control} render={({ field }) => (
+                  <FormItem><FormLabel>Abate Total</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <div className="grid md:grid-cols-3 gap-4">
+                  <FormField name="boi" control={form.control} render={({ field }) => (
+                      <FormItem><FormLabel>Boi</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField name="vaca" control={form.control} render={({ field }) => (
+                      <FormItem><FormLabel>Vaca</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField name="condenado" control={form.control} render={({ field }) => (
+                      <FormItem><FormLabel>Condenado</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+              </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-6">
+              {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
+              <Button type="submit" form="abate-form">{isEditing ? "Salvar Alterações" : "Registrar Abate"}</Button>
+          </div>
+      </GenericForm>
+    );
 
-                <Card>
-                    <CardHeader><CardTitle>Histórico de Abates</CardTitle></CardHeader>
-                    <CardContent><GenericTable columns={columns} data={abates} /></CardContent>
-                </Card>
-            </div>
-        </CenteredLayout>
+    const tableContent = <GenericTable columns={columns} data={abates} />;
+
+    return (
+        <CrudLayout
+            formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro de Abate"}
+            formContent={formContent}
+            tableTitle="Histórico de Abates"
+            tableContent={tableContent}
+        />
     );
 }

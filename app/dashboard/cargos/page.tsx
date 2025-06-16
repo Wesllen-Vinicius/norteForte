@@ -7,15 +7,15 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
-import { CenteredLayout } from "@/components/centered-layout";
+import { toast } from "sonner";
+
+import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import { addCargo, subscribeToCargos, Cargo, deleteCargo, updateCargo } from "@/lib/services/cargos.services";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const cargoSchema = z.object({
   id: z.string().optional(),
@@ -80,7 +80,6 @@ export default function CargosPage() {
     },
     {
       id: "actions",
-      header: () => <div className="text-right">Ações</div>,
       cell: ({ row }) => {
         const cargo = row.original;
         return (
@@ -95,56 +94,49 @@ export default function CargosPage() {
         )
       }
     }
-  ]
+  ];
+
+  const formContent = (
+    <GenericForm
+      schema={cargoSchema}
+      onSubmit={onSubmit}
+      formId="cargo-form"
+      form={form}
+    >
+      <FormField
+        control={form.control}
+        name="nome"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Nome do Cargo</FormLabel>
+            <FormControl>
+              <Input placeholder="Ex: Açougueiro, Gerente" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <div className="flex justify-end gap-2 mt-4">
+          {isEditing && (
+            <Button type="button" variant="outline" onClick={resetForm}>
+              Cancelar
+            </Button>
+          )}
+        <Button type="submit" form="cargo-form">{isEditing ? "Salvar Alterações" : "Adicionar Cargo"}</Button>
+      </div>
+    </GenericForm>
+  );
+
+  const tableContent = (
+    <GenericTable columns={columns} data={cargos} />
+  );
 
   return (
-    <CenteredLayout>
-      <div className="space-y-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>{isEditing ? "Editar Cargo" : "Novo Cargo"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <GenericForm
-              schema={cargoSchema}
-              onSubmit={onSubmit}
-              formId="cargo-form"
-              form={form}
-            >
-              <FormField
-                control={form.control}
-                name="nome"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome do Cargo</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: Açougueiro, Gerente" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="flex justify-end gap-2 mt-4">
-                 {isEditing && (
-                    <Button type="button" variant="outline" onClick={resetForm}>
-                      Cancelar Edição
-                    </Button>
-                  )}
-                <Button type="submit" form="cargo-form">{isEditing ? "Salvar Alterações" : "Adicionar Cargo"}</Button>
-              </div>
-            </GenericForm>
-          </CardContent>
-        </Card>
-
-        <Card>
-           <CardHeader>
-            <CardTitle>Cargos Cadastrados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <GenericTable columns={columns} data={cargos} />
-          </CardContent>
-        </Card>
-      </div>
-    </CenteredLayout>
+    <CrudLayout
+      formTitle={isEditing ? "Editar Cargo" : "Novo Cargo"}
+      formContent={formContent}
+      tableTitle="Cargos Cadastrados"
+      tableContent={tableContent}
+    />
   );
 }
