@@ -7,7 +7,6 @@ import { type Icon, IconArchive, IconShoppingCart, IconClipboardPlus, IconDashbo
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 
-
 const navLinks = [
   { title: "Dashboard", url: "/dashboard", icon: IconDashboard, group: "Análise" },
   { title: "Relatórios", url: "/dashboard/relatorios", icon: IconReportAnalytics, group: "Análise" },
@@ -21,15 +20,16 @@ const navLinks = [
   { title: "Produtos", url: "/dashboard/produtos", icon: IconPackages, group: "Cadastros" },
 ];
 
-
-const groupedNav = navLinks.reduce((acc, item) => {
-    (acc[item.group] = acc[item.group] || []).push(item);
-    return acc;
-}, {} as Record<string, typeof navLinks>);
-
+const getGroupedNav = () => {
+    return navLinks.reduce((acc, item) => {
+        (acc[item.group] = acc[item.group] || []).push(item);
+        return acc;
+    }, {} as Record<string, typeof navLinks>);
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const groupedNav = getGroupedNav();
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -49,16 +49,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroup key={group}>
                 <SidebarGroupLabel>{group}</SidebarGroupLabel>
                 <SidebarMenu>
-                    {items.map((item) => (
-                        <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton asChild tooltip={item.title} isActive={pathname.startsWith(item.url)}>
-                            <Link href={item.url}>
-                                {item.icon && <item.icon />}
-                                <span>{item.title}</span>
-                            </Link>
-                        </SidebarMenuButton>
-                        </SidebarMenuItem>
-                    ))}
+                    {items.map((item) => {
+                        const isActive = item.url === '/dashboard'
+                          ? pathname === item.url
+                          : pathname.startsWith(item.url);
+
+                        return (
+                            <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
+                                <Link href={item.url}>
+                                    {item.icon && <item.icon />}
+                                    <span>{item.title}</span>
+                                </Link>
+                            </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        )
+                    })}
                 </SidebarMenu>
             </SidebarGroup>
         ))}
