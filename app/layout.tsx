@@ -1,4 +1,4 @@
-"use client" // É necessário para usar o pathname e o AuthGuard
+"use client"
 
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -12,7 +12,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isLoginPage = pathname === '/login';
 
   return (
-    <html>
+    // A única mudança é aqui, na tag <html>
+    <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <AuthProvider>
           <ThemeProvider

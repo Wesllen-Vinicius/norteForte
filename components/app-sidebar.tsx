@@ -2,34 +2,13 @@
 
 import Link from "next/link";
 import * as React from "react"
-import {
-  IconArchive,
-  IconShoppingCart,
-  IconClipboardPlus,
-  IconDashboard,
-  IconInnerShadowTop,
-  IconMeat,
-  IconPackages,
-  IconReportAnalytics,
-  IconUserShield,
-  IconUsers,
-  IconUsersGroup,
-} from "@tabler/icons-react"
-import { NavMain } from "@/components/nav-main"
+import { usePathname } from "next/navigation";
+import { type Icon, IconArchive, IconShoppingCart, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup } from "@tabler/icons-react"
 import { NavUser } from "@/components/nav-user"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar"
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 
-// A estrutura de dados volta a ser um array simples
-const navMain = [
+
+const navLinks = [
   { title: "Dashboard", url: "/dashboard", icon: IconDashboard, group: "Análise" },
   { title: "Relatórios", url: "/dashboard/relatorios", icon: IconReportAnalytics, group: "Análise" },
   { title: "Vendas", url: "/dashboard/vendas", icon: IconShoppingCart, group: "Operacional" },
@@ -42,25 +21,21 @@ const navMain = [
   { title: "Produtos", url: "/dashboard/produtos", icon: IconPackages, group: "Cadastros" },
 ];
 
-// Função para agrupar os itens do menu
-const getGroupedNav = () => {
-    return navMain.reduce((acc, item) => {
-        (acc[item.group] = acc[item.group] || []).push(item);
-        return acc;
-    }, {} as Record<string, typeof navMain>);
-}
+
+const groupedNav = navLinks.reduce((acc, item) => {
+    (acc[item.group] = acc[item.group] || []).push(item);
+    return acc;
+}, {} as Record<string, typeof navLinks>);
+
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-    const groupedNav = getGroupedNav();
+  const pathname = usePathname();
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:!p-1.5"
-            >
+            <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
               <Link href="/dashboard">
                 <IconInnerShadowTop className="!size-5" />
                 <span className="text-base font-semibold">AshesBorn</span>
@@ -68,15 +43,27 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarHeader>
+
       <SidebarContent>
-        {/* Renderiza os grupos de forma correta */}
         {Object.entries(groupedNav).map(([group, items]) => (
             <SidebarGroup key={group}>
                 <SidebarGroupLabel>{group}</SidebarGroupLabel>
-                <NavMain items={items} />
+                <SidebarMenu>
+                    {items.map((item) => (
+                        <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild tooltip={item.title} isActive={pathname.startsWith(item.url)}>
+                            <Link href={item.url}>
+                                {item.icon && <item.icon />}
+                                <span>{item.title}</span>
+                            </Link>
+                        </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    ))}
+                </SidebarMenu>
             </SidebarGroup>
         ))}
       </SidebarContent>
+
       <SidebarFooter>
         <NavUser />
       </SidebarFooter>
