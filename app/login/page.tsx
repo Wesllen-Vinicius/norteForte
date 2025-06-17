@@ -6,28 +6,26 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { IconBrandGoogle } from "@tabler/icons-react";
-
 import { useAuthStore } from "@/store/auth.store";
-import { loginSchema, signInWithEmail, signInWithGoogle } from "@/lib/services/auth.services";
+import { loginSchema, signInWithEmail } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { IconMeat } from "@tabler/icons-react";
+import { LoadingIndicator } from "@/components/loading-indicator";
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const { user, isLoading } = useAuthStore(); // Obtenha o estado do usuário
+    const { user, isLoading } = useAuthStore();
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },
     });
 
-    // Efeito para redirecionar se o usuário já estiver logado
     useEffect(() => {
         if (!isLoading && user) {
             router.push('/dashboard');
@@ -35,69 +33,57 @@ export default function LoginPage() {
     }, [user, isLoading, router]);
 
     const onSubmit = async (values: LoginFormValues) => {
-        try {
-            await signInWithEmail(values);
-            toast.success("Login realizado com sucesso!");
-            router.push('/dashboard');
-        } catch (error: any) {
-            toast.error("Falha no login", { description: "Verifique seu e-mail e senha."});
-        }
+        const promise = signInWithEmail(values);
+        toast.promise(promise, {
+            loading: "Autenticando...",
+            success: () => {
+                router.push('/dashboard');
+                return "Login realizado com sucesso!";
+            },
+            error: "Falha no login. Verifique seu e-mail e senha.",
+        });
     };
 
-    const handleGoogleLogin = async () => {
-        try {
-            await signInWithGoogle();
-            toast.success("Login com Google realizado com sucesso!");
-            router.push('/dashboard');
-        } catch (error: any) {
-            toast.error("Falha no login com Google.");
-        }
-    };
-
-    // Enquanto o estado de auth está sendo verificado, não mostra o formulário
-    if (isLoading) {
-        return (
-             <div className="flex h-screen w-full items-center justify-center">
-                Carregando...
-            </div>
-        );
+    if (isLoading || user) {
+        return <LoadingIndicator />;
     }
 
-    // Se não estiver carregando e o usuário não estiver logado, mostra a página de login
     return (
-        <div className="flex min-h-screen items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>Login</CardTitle>
-                    <CardDescription>Acesse o dashboard com suas credenciais.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
-                        <div className="space-y-4">
-                            <FormField name="email" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>E-mail</FormLabel>
-                                    <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                             <FormField name="password" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Senha</FormLabel>
-                                    <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                        </div>
-                        <Button type="submit" form="login-form" className="w-full mt-6">Entrar</Button>
-                    </GenericForm>
-                    <Separator className="my-6" />
-                    <Button variant="outline" className="w-full" onClick={handleGoogleLogin}>
-                        <IconBrandGoogle className="mr-2 h-4 w-4"/>
-                        Entrar com Google
-                    </Button>
-                </CardContent>
-            </Card>
+        <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+            <div className="w-full max-w-md">
+                <div className="flex justify-center mb-6">
+                   <IconMeat size={48} className="text-primary"/>
+                </div>
+                <Card className="shadow-xl">
+                    <CardHeader className="text-center">
+                        <CardTitle className="text-2xl">Acesso ao Dashboard</CardTitle>
+                        <CardDescription>Utilize suas credenciais para entrar.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
+                            <div className="space-y-4">
+                                <FormField name="email" control={form.control} render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>E-mail</FormLabel>
+                                        <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField name="password" control={form.control} render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Senha</FormLabel>
+                                        <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                            </div>
+                        </GenericForm>
+                         <Button type="submit" form="login-form" className="w-full mt-6" size="lg">
+                            Entrar
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }

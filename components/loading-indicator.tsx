@@ -1,26 +1,20 @@
-// components/loading-indicator.tsx
 "use client"
 
 import * as React from "react"
 import { Progress } from "@/components/ui/progress"
 
 export function LoadingIndicator() {
-  const [progress, setProgress] = React.useState(10)
+  const [progress, setProgress] = React.useState(13)
 
-  // Efeito para criar uma animação suave na barra de progresso
   React.useEffect(() => {
-    const timer = setTimeout(() => setProgress(Math.random() * 40 + 20), 500)
-    const timer2 = setTimeout(() => setProgress(Math.random() * 50 + 40), 1500)
-    return () => {
-        clearTimeout(timer)
-        clearTimeout(timer2)
-    }
+    const timer = setTimeout(() => setProgress(80), 500)
+    return () => clearTimeout(timer)
   }, [])
 
   return (
-    <div className="flex h-screen w-full flex-col items-center justify-center gap-4">
-        <span className="text-muted-foreground">Carregando aplicação...</span>
-        <Progress value={progress} className="w-[40%] max-w-sm" />
+    <div className="flex h-screen w-full flex-col items-center justify-center gap-4 bg-background">
+        <span className="text-muted-foreground animate-pulse">Carregando Aplicação...</span>
+        <Progress value={progress} className="w-[40%] max-w-sm transition-all duration-500 ease-in-out" />
     </div>
   )
 }

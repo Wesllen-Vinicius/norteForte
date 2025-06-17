@@ -16,6 +16,7 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/date-picker";
 import { Abate, abateSchema, addAbate, subscribeToAbates, updateAbate, deleteAbate } from "@/lib/services/abates.services";
+import { AnaliseAbate } from "@/components/analise-abate"; // Importa o novo componente
 
 type AbateFormValues = z.infer<typeof abateSchema>;
 
@@ -32,6 +33,7 @@ export default function AbatesPage() {
         return () => unsubscribe();
     }, []);
 
+    // ... (handleEdit, handleDelete, resetForm, onSubmit continuam os mesmos)
     const handleEdit = (abate: Abate) => {
         form.reset(abate);
         setIsEditing(true);
@@ -92,7 +94,7 @@ export default function AbatesPage() {
                   <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField name="total" control={form.control} render={({ field }) => (
-                  <FormItem><FormLabel>Abate Total</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Abate Total (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <div className="grid md:grid-cols-3 gap-4">
                   <FormField name="boi" control={form.control} render={({ field }) => (
@@ -108,7 +110,7 @@ export default function AbatesPage() {
           </div>
           <div className="flex justify-end gap-2 pt-6">
               {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-              <Button type="submit" form="abate-form">{isEditing ? "Salvar Alterações" : "Registrar Abate"}</Button>
+              <Button type="submit" form="abate-form">{isEditing ? "Salvar" : "Registrar"}</Button>
           </div>
       </GenericForm>
     );
@@ -116,11 +118,16 @@ export default function AbatesPage() {
     const tableContent = <GenericTable columns={columns} data={abates} />;
 
     return (
-        <CrudLayout
-            formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro de Abate"}
-            formContent={formContent}
-            tableTitle="Histórico de Abates"
-            tableContent={tableContent}
-        />
+        <div className="container mx-auto py-8 px-4 md:px-6 space-y-8">
+            {/* Componente de Análise inserido aqui */}
+            <AnaliseAbate />
+
+            <CrudLayout
+                formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
+                formContent={formContent}
+                tableTitle="Histórico de Abates"
+                tableContent={tableContent}
+            />
+        </div>
     );
 }
