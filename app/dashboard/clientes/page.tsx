@@ -7,6 +7,8 @@ import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -14,18 +16,23 @@ import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { Cliente, clienteSchema, addCliente, subscribeToClientes, updateCliente, deleteCliente } from "@/lib/services/clientes.services";
+import { useAuthStore } from "@/store/auth.store";
 
 type ClienteFormValues = z.infer<typeof clienteSchema>;
 
 export default function ClientesPage() {
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const { role } = useAuthStore();
 
     const form = useForm<ClienteFormValues>({
         resolver: zodResolver(clienteSchema),
         defaultValues: { id: "", nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "", endereco: "" },
     });
+
+    const tipoPessoa = form.watch("tipoPessoa");
 
     useEffect(() => {
         const unsubscribe = subscribeToClientes(setClientes);
@@ -72,14 +79,27 @@ export default function ClientesPage() {
         { accessorKey: "nome", header: "Nome" },
         { accessorKey: "telefone", header: "Telefone" },
         { accessorKey: "email", header: "E-mail" },
+        { accessorKey: "endereco", header: "Endereço" },
         {
             id: "actions",
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}><IconTrash className="h-4 w-4" /></Button>
-                </div>
-            )
+            cell: ({ row }) => {
+                const item = row.original;
+                const createdAt = item.createdAt as Timestamp | undefined;
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+
+                return (
+                    <div className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isEditable}>
+                            <IconPencil className="h-4 w-4" />
+                        </Button>
+                        {role === 'ADMINISTRADOR' && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(item.id!)}>
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                );
+            }
         },
     ];
 
@@ -105,16 +125,28 @@ export default function ClientesPage() {
                         </FormItem>
                     )} />
                     <FormField name="documento" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>CPF / CNPJ</FormLabel><FormControl><Input placeholder="Número do documento" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>CPF / CNPJ</FormLabel>
+                            <FormControl>
+                                <MaskedInput
+                                    placeholder="Número do documento"
+                                    mask={tipoPessoa === 'fisica' ? '999.999.999-99' : '99.999.999/9999-99'}
+                                    {...field}
+                                />
+                            </FormControl>
+                        <FormMessage /></FormItem>
                     )} />
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
                     <FormField name="telefone" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>Telefone</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Telefone</FormLabel>
+                            <FormControl>
+                                <MaskedInput mask="(99) 99999-9999" placeholder="(XX) XXXXX-XXXX" {...field} />
+                            </FormControl>
+                        <FormMessage /></FormItem>
                     )} />
                     <FormField name="email" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                 </div>
                 <FormField name="endereco" control={form.control} render={({ field }) => (

@@ -11,3 +11,4 @@ export const cargoSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(2, { message: "O nome do cargo deve ter pelo menos 2 caracteres." }),
 });
+

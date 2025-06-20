@@ -1,9 +1,7 @@
-// lib/services/abates.services.ts
 import { db } from "@/lib/firebase";
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { z } from "zod";
 
-// Schema para um registro de abate
 export const abateSchema = z.object({
   id: z.string().optional(),
   data: z.date({ required_error: "A data é obrigatória." }),
@@ -11,28 +9,27 @@ export const abateSchema = z.object({
   boi: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
   vaca: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
   condenado: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
+  createdAt: z.any().optional(),
 }).refine(data => data.total === data.boi + data.vaca, {
     message: "O total de abates deve ser a soma de bois e vacas.",
-    path: ["total"], // Indica qual campo mostrará o erro
+    path: ["total"],
 });
 
 export type Abate = z.infer<typeof abateSchema>;
 
-// Adicionar um novo registro de abate
 export const addAbate = async (abate: Omit<Abate, 'id'>) => {
   try {
-    const dataComTimestamp = {
+    const dataWithTimestamp = {
         ...abate,
-        data: abate.data, // A data já é um objeto Date
+        createdAt: serverTimestamp(),
     };
-    await addDoc(collection(db, "abates"), dataComTimestamp);
+    await addDoc(collection(db, "abates"), dataWithTimestamp);
   } catch (e) {
     console.error("Erro ao adicionar abate: ", e);
     throw new Error("Não foi possível adicionar o registro de abate.");
   }
 };
 
-// Escutar atualizações em tempo real
 export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
   const q = collection(db, "abates");
   const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -42,21 +39,19 @@ export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
         abates.push({
             id: doc.id,
             ...data,
-            data: data.data.toDate() // Converte Timestamp do Firebase para Date do JS
+            data: data.data.toDate()
         } as Abate);
     });
-    callback(abates.sort((a, b) => b.data.getTime() - a.data.getTime())); // Ordena por data mais recente
+    callback(abates.sort((a, b) => b.data.getTime() - a.data.getTime()));
   });
   return unsubscribe;
 };
 
-// Atualizar um registro de abate
 export const updateAbate = async (id: string, abate: Omit<Abate, 'id'>) => {
   const abateDoc = doc(db, "abates", id);
   await updateDoc(abateDoc, abate);
 };
 
-// Deletar um registro de abate
 export const deleteAbate = async (id:string) => {
     const abateDoc = doc(db, "abates", id);
     await deleteDoc(abateDoc);

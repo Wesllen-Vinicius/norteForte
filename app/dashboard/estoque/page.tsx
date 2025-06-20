@@ -1,4 +1,3 @@
-// app/dashboard/estoque/page.tsx
 "use client"
 
 import { useEffect, useState } from "react";
@@ -18,21 +17,15 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
-import { registrarMovimentacao } from "@/lib/services/estoque.services";
+import { registrarMovimentacao, movimentacaoSchema } from "@/lib/services/estoque.services";
 
-const movimentacaoFormSchema = z.object({
-    produtoId: z.string().min(1, "Selecione um produto."),
-    tipo: z.enum(["entrada", "saida"], { required_error: "Selecione o tipo."}),
-    quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
-    motivo: z.string().optional(),
-});
-
-type MovimentacaoFormValues = z.infer<typeof movimentacaoFormSchema>;
+type MovimentacaoFormValues = z.infer<typeof movimentacaoSchema>;
 
 export default function EstoquePage() {
     const [produtos, setProdutos] = useState<Produto[]>([]);
     const form = useForm<MovimentacaoFormValues>({
-        resolver: zodResolver(movimentacaoFormSchema),
+        resolver: zodResolver(movimentacaoSchema),
+        defaultValues: { produtoId: "", quantidade: 0, tipo: undefined, motivo: "" }
     });
 
     useEffect(() => {
@@ -68,7 +61,13 @@ export default function EstoquePage() {
             header: "Quantidade em Estoque",
             cell: ({ row }) => {
                 const produto = row.original;
-                return `${produto.quantidade || 0} ${produto.unidadeDeMedida.toUpperCase()}`;
+                let unidadeSigla = 'N/A';
+                if (produto.tipoProduto === 'VENDA') {
+                  unidadeSigla = "unidade";
+                } else {
+                  unidadeSigla = "unidade";
+                }
+                return `${produto.quantidade || 0} ${unidadeSigla}`;
             }
         },
     ];
@@ -78,7 +77,7 @@ export default function EstoquePage() {
         <CardDescription className="mb-6">
           Use este formulário para registrar entradas e saídas manuais.
         </CardDescription>
-        <GenericForm schema={movimentacaoFormSchema} onSubmit={onSubmit} formId="movimentacao-form" form={form}>
+        <GenericForm schema={movimentacaoSchema} onSubmit={onSubmit} formId="movimentacao-form" form={form}>
             <div className="space-y-4">
               <FormField name="produtoId" control={form.control} render={({ field }) => (
                   <FormItem>

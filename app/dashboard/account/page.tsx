@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { updateUserProfile, uploadProfileImage, changeUserPassword } from "@/lib/services/user.services";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import React from "react";
 
 const profileSchema = z.object({
@@ -34,13 +34,11 @@ export default function AccountPage() {
     const { user } = useAuthStore();
     const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [isSavingPassword, setIsSavingPassword] = useState(false);
-
-    // Estado para preview da imagem
-    const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photoURL ?? null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
     const profileForm = useForm<z.infer<typeof profileSchema>>({
         resolver: zodResolver(profileSchema),
-        defaultValues: { displayName: user?.displayName || "" },
+        defaultValues: { displayName: "" },
     });
 
     const passwordForm = useForm<z.infer<typeof passwordSchema>>({
@@ -48,12 +46,18 @@ export default function AccountPage() {
         defaultValues: { newPassword: "", confirmPassword: "" },
     });
 
+    useEffect(() => {
+        if(user) {
+            profileForm.reset({ displayName: user.displayName || "" });
+            setPhotoPreview(user.photoURL ?? null);
+        }
+    }, [user, profileForm]);
+
     const handleProfileSubmit = async (values: z.infer<typeof profileSchema>) => {
         if (!user) return;
         setIsSavingProfile(true);
 
         try {
-            // AQUI ESTÁ A CORREÇÃO: A variável é inicializada corretamente
             let newPhotoURL: string | null = user.photoURL;
 
             if (values.photoFile && values.photoFile.length > 0) {
@@ -83,14 +87,12 @@ export default function AccountPage() {
         }
     };
 
-    // Atualiza o preview da imagem quando o usuário seleciona um novo arquivo
     const photoFile = profileForm.watch("photoFile");
     React.useEffect(() => {
         if (photoFile && photoFile.length > 0) {
             const newPreviewUrl = URL.createObjectURL(photoFile[0]);
             setPhotoPreview(newPreviewUrl);
 
-            // Limpa a URL do objeto quando o componente for desmontado
             return () => URL.revokeObjectURL(newPreviewUrl);
         }
     }, [photoFile]);

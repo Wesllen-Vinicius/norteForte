@@ -1,10 +1,30 @@
-// lib/services/dashboard.services.ts
 import { db } from "@/lib/firebase";
 import { collection, getCountFromServer, getDocs, query, where, Timestamp, orderBy } from "firebase/firestore";
 import { format } from 'date-fns';
-import { Venda } from "./vendas.services";
 
-// Busca os dados para os cartões de resumo
+const getLucroBrutoMes = async () => {
+    const vendasRef = collection(db, "vendas");
+    const hoje = new Date();
+    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const q = query(vendasRef, where("data", ">=", Timestamp.fromDate(primeiroDiaMes)));
+
+    const querySnapshot = await getDocs(q);
+    let lucroTotal = 0;
+
+    querySnapshot.forEach(doc => {
+        const venda = doc.data();
+        if (Array.isArray(venda.produtos)) {
+            venda.produtos.forEach((item: any) => {
+                if (typeof item.precoUnitario === 'number' && typeof item.custoUnitario === 'number' && typeof item.quantidade === 'number') {
+                    const lucroItem = (item.precoUnitario - item.custoUnitario) * item.quantidade;
+                    lucroTotal += lucroItem;
+                }
+            });
+        }
+    });
+    return lucroTotal;
+};
+
 export const getDashboardStats = async () => {
     const getCollectionCount = async (collectionName: string) => {
         const collectionRef = collection(db, collectionName);
@@ -28,14 +48,15 @@ export const getDashboardStats = async () => {
         return total;
     };
 
-    const [totalFuncionarios, totalProdutos, totalClientes, totalVendasMes] = await Promise.all([
+    const [totalFuncionarios, totalProdutos, totalClientes, totalVendasMes, lucroBrutoMes] = await Promise.all([
         getCollectionCount("funcionarios"),
         getCollectionCount("produtos"),
         getCollectionCount("clientes"),
         getTotalVendasMes(),
+        getLucroBrutoMes(),
     ]);
 
-    return { totalFuncionarios, totalProdutos, totalClientes, totalVendasMes };
+    return { totalFuncionarios, totalProdutos, totalClientes, totalVendasMes, lucroBrutoMes };
 };
 
 // Busca e agrega os dados para o gráfico de movimentações dos últimos 30 dias

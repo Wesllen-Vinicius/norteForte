@@ -13,6 +13,7 @@ type Stats = {
   totalProdutos: number;
   totalClientes: number;
   totalVendasMes: number;
+  lucroBrutoMes: number;
 };
 
 type MovimentacoesChartData = { date: string; entradas: number; saidas: number; }[];
@@ -52,7 +53,8 @@ export default function Page() {
   return (
     <div className="flex flex-col gap-6 py-6">
       {isLoading || !stats ? (
-        <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4 lg:px-6">
+        <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-5 lg:px-6">
+          <Skeleton className="h-32" />
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />

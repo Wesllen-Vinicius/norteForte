@@ -1,26 +1,37 @@
 // store/auth.store.ts
 import { create } from 'zustand';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase'; // Vamos criar este arquivo a seguir
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
-// Define a interface para o estado da nossa store
 interface AuthState {
   user: User | null;
+  role: 'ADMINISTRADOR' | 'USUARIO' | null;
   isLoading: boolean;
   setUser: (user: User | null) => void;
-  initializeAuthListener: () => () => void; // Retorna a função de unsubscribe
+  initializeAuthListener: () => () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isLoading: true, // Começa como true para sabermos que a verificação inicial está acontecendo
+  role: null,
+  isLoading: true,
   setUser: (user) => set({ user }),
 
-  // Esta função escuta as mudanças de autenticação do Firebase
   initializeAuthListener: () => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      set({ user: user, isLoading: false });
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          set({ user: user, role: userDoc.data().role, isLoading: false });
+        } else {
+          set({ user: user, role: null, isLoading: false });
+        }
+      } else {
+        set({ user: null, role: null, isLoading: false });
+      }
     });
-    return unsubscribe; // Retorna o listener para que possamos limpá-lo
+    return unsubscribe;
   },
 }));

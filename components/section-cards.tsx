@@ -1,4 +1,4 @@
-import { IconUsersGroup, IconShoppingCart, IconBox, IconUsers } from "@tabler/icons-react";
+import { IconUsersGroup, IconShoppingCart, IconBox, IconUsers, IconTrendingUp } from "@tabler/icons-react";
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface SectionCardsProps {
@@ -7,12 +7,22 @@ interface SectionCardsProps {
     totalProdutos: number;
     totalClientes: number;
     totalVendasMes: number;
+    lucroBrutoMes: number;
   };
 }
 
 export function SectionCards({ stats }: SectionCardsProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4 lg:px-6">
+    <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-5 lg:px-6">
+      <Card>
+        <CardHeader>
+          <CardDescription>Lucro Bruto no Mês</CardDescription>
+          <CardTitle className="text-3xl font-semibold text-green-600">
+            R$ {stats.lucroBrutoMes.toFixed(2).replace('.', ',')}
+          </CardTitle>
+        </CardHeader>
+        <CardFooter><IconTrendingUp className="size-4 text-muted-foreground" /></CardFooter>
+      </Card>
       <Card>
         <CardHeader>
           <CardDescription>Vendas no Mês</CardDescription>
@@ -38,7 +48,7 @@ export function SectionCards({ stats }: SectionCardsProps) {
       </Card>
       <Card>
         <CardHeader>
-          <CardDescription>Total de Funcionários</CardDescription>
+          <CardDescription>Total de Prestadores</CardDescription>
           <CardTitle className="text-3xl font-semibold">{stats.totalFuncionarios}</CardTitle>
         </CardHeader>
         <CardFooter><IconUsers className="size-4 text-muted-foreground" /></CardFooter>
