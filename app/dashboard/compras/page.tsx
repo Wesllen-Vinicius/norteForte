@@ -19,7 +19,7 @@ import { DatePicker } from "@/components/date-picker";
 
 import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
 import { Fornecedor, subscribeToFornecedores } from "@/lib/services/fornecedores.services";
-import { compraSchema, registrarCompra } from "@/lib/services/compras.services";
+import { compraSchema, registrarCompra, Compra } from "@/lib/services/compras.services";
 
 type CompraFormValues = z.infer<typeof compraSchema>;
 
@@ -29,7 +29,8 @@ export default function ComprasPage() {
 
     const form = useForm<CompraFormValues>({
         resolver: zodResolver(compraSchema),
-        defaultValues: { fornecedorId: "", notaFiscal: "", data: new Date(), itens: [], condicaoPagamento: "" },
+        // CORREÇÃO 1: Inicializa 'valorTotal' para garantir que nunca seja undefined.
+        defaultValues: { fornecedorId: "", notaFiscal: "", data: new Date(), itens: [], condicaoPagamento: "", valorTotal: 0 },
     });
 
     const { fields, append, remove } = useFieldArray({
@@ -38,6 +39,8 @@ export default function ComprasPage() {
     });
 
     const watchedItens = useWatch({ control: form.control, name: 'itens' });
+    // CORREÇÃO 2: Usa 'watch' para obter o valor total de forma reativa para a UI.
+    const watchedTotal = form.watch('valorTotal');
 
     useEffect(() => {
         const unsubProdutos = subscribeToProdutos(setProdutos);
@@ -130,7 +133,8 @@ export default function ComprasPage() {
                                 )} />
                                 <div className="text-right">
                                     <p className="text-sm text-muted-foreground">Valor Total da Compra</p>
-                                    <p className="text-2xl font-bold">R$ {form.getValues('valorTotal').toFixed(2).replace('.', ',')}</p>
+                                    {/* CORREÇÃO 3: Exibe o valor reativo com um fallback para 0 */}
+                                    <p className="text-2xl font-bold">R$ {(watchedTotal || 0).toFixed(2).replace('.', ',')}</p>
                                 </div>
                             </div>
                         </div>

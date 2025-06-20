@@ -1,33 +1,39 @@
-import { auth } from "@/lib/firebase";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { updateProfile, updatePassword, User } from "firebase/auth";
-import { useAuthStore } from "@/store/auth.store";
+// lib/services/users.services.ts
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { z } from "zod";
 
-const storage = getStorage();
+export const userSchema = z.object({
+  uid: z.string(),
+  displayName: z.string().min(1, "O nome de exibição é obrigatório."),
+  email: z.string().email(),
+  role: z.enum(['ADMINISTRADOR', 'USUARIO']),
+  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres.").optional().or(z.literal('')),
+});
 
-export const uploadProfileImage = async (file: File, userId: string): Promise<string> => {
-    if (!file) throw new Error("Nenhum arquivo selecionado.");
+export type SystemUser = z.infer<typeof userSchema>;
 
-    const fileRef = ref(storage, `profileImages/${userId}/${file.name}`);
-    const snapshot = await uploadBytes(fileRef, file);
-    const photoURL = await getDownloadURL(snapshot.ref);
-    return photoURL;
+export const setUserDoc = async (userData: Omit<SystemUser, 'password'>) => {
+  const userDocRef = doc(db, "users", userData.uid);
+  await setDoc(userDocRef, userData, { merge: true });
 };
 
-export const updateUserProfile = async (displayName: string, photoURL?: string | null) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error("Usuário não autenticado.");
-
-    await updateProfile(user, { displayName, photoURL: photoURL ?? user.photoURL });
-
-    await user.reload();
-    const updatedUser = auth.currentUser;
-    useAuthStore.getState().setUser(updatedUser as User);
+export const updateUserRole = async (uid: string, role: 'ADMINISTRADOR' | 'USUARIO') => {
+  const userDocRef = doc(db, "users", uid);
+  await updateDoc(userDocRef, { role });
 };
 
-export const changeUserPassword = async (newPassword: string) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error("Usuário não autenticado.");
+export const subscribeToUsers = (callback: (users: SystemUser[]) => void) => {
+  return onSnapshot(collection(db, "users"), (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const users: SystemUser[] = [];
+    querySnapshot.forEach((doc) => {
+      users.push(doc.data() as SystemUser);
+    });
+    callback(users);
+  });
+};
 
-    await updatePassword(user, newPassword);
+export const deleteUserDoc = async (uid: string) => {
+  const userDocRef = doc(db, "users", uid);
+  await deleteDoc(userDocRef);
 };

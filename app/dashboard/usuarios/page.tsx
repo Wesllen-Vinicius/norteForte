@@ -18,6 +18,8 @@ import { createUserInAuth } from "@/lib/services/auth.services";
 import { Badge } from "@/components/ui/badge";
 import { setUserDoc, subscribeToUsers, SystemUser, updateUserRole, userSchema } from "@/lib/services/user.services";
 
+
+
 type UserFormValues = z.infer<typeof userSchema>;
 
 export default function UsuariosPage() {
@@ -26,7 +28,7 @@ export default function UsuariosPage() {
 
     const form = useForm<UserFormValues>({
         resolver: zodResolver(userSchema),
-        defaultValues: { uid: "", displayName: "", email: "", role: "USUARIO" },
+        defaultValues: { uid: "", displayName: "", email: "", role: "USUARIO", password: "" },
     });
 
     useEffect(() => {
@@ -35,7 +37,7 @@ export default function UsuariosPage() {
     }, []);
 
     const handleEdit = (user: SystemUser) => {
-        form.reset({ ...user, password: "" }); // Limpa senha ao editar
+        form.reset({ ...user, password: "" });
         setIsEditing(true);
     };
 
@@ -47,12 +49,10 @@ export default function UsuariosPage() {
     const onSubmit = async (values: UserFormValues) => {
         try {
             if (isEditing && values.uid) {
-                // Editando um usuário existente (só pode mudar a função e o nome)
                 await updateUserRole(values.uid, values.role);
                 await setUserDoc({ uid: values.uid, displayName: values.displayName, email: values.email, role: values.role });
                 toast.success("Usuário atualizado com sucesso!");
             } else {
-                // Criando um novo usuário
                 if (!values.password) {
                     toast.error("A senha é obrigatória para criar um novo usuário.");
                     return;
@@ -76,7 +76,6 @@ export default function UsuariosPage() {
             cell: ({ row }) => (
                 <div className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    {/* A lógica de exclusão de usuário do Auth deve ser tratada com cuidado, talvez por uma cloud function */}
                     <Button variant="ghost" size="icon" disabled className="text-destructive hover:text-destructive"><IconTrash className="h-4 w-4" /></Button>
                 </div>
             )

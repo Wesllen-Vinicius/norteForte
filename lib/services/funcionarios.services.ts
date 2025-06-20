@@ -8,11 +8,13 @@ export const funcionarioSchema = z.object({
 
   // Dados da Empresa (MEI)
   razaoSocial: z.string().min(3, "A Razão Social é obrigatória."),
-  cnpj: z.string().min(18, "O CNPJ é obrigatório e deve ter 14 dígitos.").max(18, "O CNPJ inválido."),
+  // Ajuste para aceitar a máscara completa
+  cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
 
   // Dados Pessoais
   nomeCompleto: z.string().min(3, "O nome completo é obrigatório."),
-  cpf: z.string().min(14, "O CPF é obrigatório e deve ter 11 dígitos.").max(14, "CPF inválido."),
+  // Ajuste para aceitar a máscara completa
+  cpf: z.string().length(14, "O CPF deve ter 11 dígitos."),
   contato: z.string().min(10, "O telefone de contato é obrigatório."),
 
   // Dados Internos

@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
 import { z } from "zod";
 
 const itemCompradoSchema = z.object({
@@ -26,10 +26,18 @@ export const registrarCompra = async (compraData: Omit<Compra, 'id' | 'createdAt
   try {
     await runTransaction(db, async (transaction) => {
       const compraDocRef = doc(collection(db, "compras"));
-      transaction.set(compraDocRef, { ...compraData, createdAt: serverTimestamp(), data: serverTimestamp() });
+      transaction.set(compraDocRef, { ...compraData, createdAt: serverTimestamp(), data: Timestamp.fromDate(compraData.data) });
 
       const contaPagarDocRef = doc(collection(db, "contasAPagar"));
-      transaction.set(contaPagarDocRef, { /* ... */ });
+      transaction.set(contaPagarDocRef, {
+        compraId: compraDocRef.id,
+        fornecedorId: compraData.fornecedorId,
+        notaFiscal: compraData.notaFiscal,
+        valor: compraData.valorTotal,
+        dataEmissao: Timestamp.fromDate(compraData.data),
+        condicaoPagamento: compraData.condicaoPagamento,
+        status: "Pendente",
+      });
 
       for (const item of compraData.itens) {
         const produtoDocRef = doc(db, "produtos", item.produtoId);

@@ -47,10 +47,9 @@
     "vaul": "^1.1.2",
     "zod": "^3.25.64",
     "zustand": "^5.0.5",
-    "react-input-mask": "^2.0.4"
+    "react-imask": "^7.6.0"
   },
   "devDependencies": {
-    "@types/react-input-mask": "^3.0.5",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
