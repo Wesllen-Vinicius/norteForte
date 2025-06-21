@@ -1,26 +1,33 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { onSnapshot, collection, doc, updateDoc } from "firebase/firestore";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
 
+import { db } from "@/lib/firebase";
 import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ContaAReceber, subscribeToContasAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
-import { useAuthStore } from "@/store/auth.store";
-
+import { ContaAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
+import { useDataStore } from "@/store/data.store";
 
 export default function ContasAReceberPage() {
     const [contas, setContas] = useState<ContaAReceber[]>([]);
-    const { role } = useAuthStore();
+    const clientes = useDataStore((state) => state.clientes);
 
     useEffect(() => {
-        const unsubscribe = subscribeToContasAReceber(setContas);
-        return () => unsubscribe();
+        const unsubContas = onSnapshot(collection(db, "contasAReceber"), (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ContaAReceber));
+            setContas(data);
+        });
+
+        return () => {
+            unsubContas();
+        };
     }, []);
 
     const handleMarcarComoRecebida = async (id: string) => {
@@ -32,7 +39,14 @@ export default function ContasAReceberPage() {
         }
     };
 
-    const columns: ColumnDef<ContaAReceber>[] = [
+    const contasComCliente = useMemo(() => {
+        return contas.map(conta => ({
+            ...conta,
+            clienteNome: clientes.find(c => c.id === conta.clienteId)?.nome || "N/A"
+        }));
+    }, [contas, clientes]);
+
+    const columns: ColumnDef<typeof contasComCliente[0]>[] = [
         { header: "Cliente", accessorKey: "clienteNome" },
         { header: "Emissão", cell: ({ row }) => format((row.original.dataEmissao as Timestamp).toDate(), 'dd/MM/yyyy') },
         { header: "Vencimento", cell: ({ row }) => format((row.original.dataVencimento as Timestamp).toDate(), 'dd/MM/yyyy') },
@@ -59,7 +73,12 @@ export default function ContasAReceberPage() {
                     <CardDescription>Visualize e gerencie as contas de vendas a prazo.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <GenericTable columns={columns} data={contas} />
+                    <GenericTable
+                        columns={columns}
+                        data={contasComCliente}
+                        filterPlaceholder="Filtrar por cliente..."
+                        filterColumnId="clienteNome"
+                    />
                 </CardContent>
             </Card>
         </div>

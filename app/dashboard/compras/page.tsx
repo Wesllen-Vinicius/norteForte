@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,20 +17,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/date-picker";
 
-import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
-import { Fornecedor, subscribeToFornecedores } from "@/lib/services/fornecedores.services";
-import { compraSchema, registrarCompra, Compra } from "@/lib/services/compras.services";
+import { useDataStore } from "@/store/data.store";
+import { compraSchema, registrarCompra } from "@/lib/services/compras.services";
 
 type CompraFormValues = z.infer<typeof compraSchema>;
 
+const defaultFormValues: CompraFormValues = {
+    fornecedorId: "",
+    notaFiscal: "",
+    data: new Date(),
+    itens: [],
+    condicaoPagamento: "",
+    valorTotal: 0
+};
+
 export default function ComprasPage() {
-    const [produtos, setProdutos] = useState<Produto[]>([]);
-    const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+    const produtos = useDataStore((state) => state.produtos);
+    const fornecedores = useDataStore((state) => state.fornecedores);
 
     const form = useForm<CompraFormValues>({
         resolver: zodResolver(compraSchema),
-        // CORREÇÃO 1: Inicializa 'valorTotal' para garantir que nunca seja undefined.
-        defaultValues: { fornecedorId: "", notaFiscal: "", data: new Date(), itens: [], condicaoPagamento: "", valorTotal: 0 },
+        defaultValues: defaultFormValues,
     });
 
     const { fields, append, remove } = useFieldArray({
@@ -39,17 +46,7 @@ export default function ComprasPage() {
     });
 
     const watchedItens = useWatch({ control: form.control, name: 'itens' });
-    // CORREÇÃO 2: Usa 'watch' para obter o valor total de forma reativa para a UI.
     const watchedTotal = form.watch('valorTotal');
-
-    useEffect(() => {
-        const unsubProdutos = subscribeToProdutos(setProdutos);
-        const unsubFornecedores = subscribeToFornecedores(setFornecedores);
-        return () => {
-            unsubProdutos();
-            unsubFornecedores();
-        };
-    }, []);
 
     useEffect(() => {
         const total = watchedItens.reduce((acc, item) => acc + (item.quantidade * item.custoUnitario || 0), 0);
@@ -67,7 +64,7 @@ export default function ComprasPage() {
             };
             await registrarCompra(compraData);
             toast.success("Compra registrada e estoque atualizado!");
-            form.reset();
+            form.reset(defaultFormValues);
             remove();
        } catch (error: any) {
            toast.error("Falha ao registrar compra", { description: error.message });
@@ -133,7 +130,6 @@ export default function ComprasPage() {
                                 )} />
                                 <div className="text-right">
                                     <p className="text-sm text-muted-foreground">Valor Total da Compra</p>
-                                    {/* CORREÇÃO 3: Exibe o valor reativo com um fallback para 0 */}
                                     <p className="text-2xl font-bold">R$ {(watchedTotal || 0).toFixed(2).replace('.', ',')}</p>
                                 </div>
                             </div>

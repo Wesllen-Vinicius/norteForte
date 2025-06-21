@@ -81,7 +81,12 @@ export default function RelatoriosPage() {
     );
 
     const tableContent = (
-      <GenericTable columns={columns} data={movimentacoes} />
+      <GenericTable
+        columns={columns}
+        data={movimentacoes}
+        filterPlaceholder="Filtrar por produto..."
+        filterColumnId="produtoNome"
+      />
     );
 
     return (

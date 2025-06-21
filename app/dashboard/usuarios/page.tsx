@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -14,27 +15,21 @@ import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createUserInAuth } from "@/lib/services/auth.services";
 import { Badge } from "@/components/ui/badge";
-import { setUserDoc, subscribeToUsers, SystemUser, updateUserRole, userSchema } from "@/lib/services/user.services";
-
-
+import { createUserInAuth } from "@/lib/services/auth.services";
+import { setUserDoc, SystemUser, updateUserRole, userSchema } from "@/lib/services/user.services";
+import { useDataStore } from "@/store/data.store";
 
 type UserFormValues = z.infer<typeof userSchema>;
 
 export default function UsuariosPage() {
-    const [users, setUsers] = useState<SystemUser[]>([]);
+    const users = useDataStore((state) => state.users);
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<UserFormValues>({
         resolver: zodResolver(userSchema),
         defaultValues: { uid: "", displayName: "", email: "", role: "USUARIO", password: "" },
     });
-
-    useEffect(() => {
-        const unsubscribe = subscribeToUsers(setUsers);
-        return () => unsubscribe();
-    }, []);
 
     const handleEdit = (user: SystemUser) => {
         form.reset({ ...user, password: "" });
@@ -50,6 +45,8 @@ export default function UsuariosPage() {
         try {
             if (isEditing && values.uid) {
                 await updateUserRole(values.uid, values.role);
+                // O nome é atualizado na página "Minha Conta", aqui só atualizamos a função.
+                // Para consistência, vamos atualizar o doc inteiro.
                 await setUserDoc({ uid: values.uid, displayName: values.displayName, email: values.email, role: values.role });
                 toast.success("Usuário atualizado com sucesso!");
             } else {
@@ -76,6 +73,7 @@ export default function UsuariosPage() {
             cell: ({ row }) => (
                 <div className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
+                    {/* A exclusão de usuários do Firebase Auth é uma operação sensível e foi desabilitada para segurança. */}
                     <Button variant="ghost" size="icon" disabled className="text-destructive hover:text-destructive"><IconTrash className="h-4 w-4" /></Button>
                 </div>
             )
@@ -107,12 +105,21 @@ export default function UsuariosPage() {
         </GenericForm>
     );
 
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={users}
+            filterPlaceholder="Filtrar por nome..."
+            filterColumnId="displayName"
+        />
+    );
+
     return (
         <CrudLayout
             formTitle={isEditing ? "Editar Usuário" : "Novo Usuário do Sistema"}
             formContent={formContent}
             tableTitle="Usuários Cadastrados"
-            tableContent={<GenericTable columns={columns} data={users} />}
+            tableContent={tableContent}
         />
     );
 }

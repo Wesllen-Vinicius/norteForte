@@ -18,32 +18,34 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { MaskedInput } from "@/components/ui/masked-input";
-import { Funcionario, funcionarioSchema, addFuncionario, subscribeToFuncionarios, updateFuncionario, deleteFuncionario } from "@/lib/services/funcionarios.services";
-import { Cargo, subscribeToCargos } from "@/lib/services/cargos.services";
+import { Funcionario, funcionarioSchema, addFuncionario, updateFuncionario, deleteFuncionario } from "@/lib/services/funcionarios.services";
 import { useAuthStore } from "@/store/auth.store";
-
+import { useDataStore } from "@/store/data.store";
 
 type FuncionarioFormValues = z.infer<typeof funcionarioSchema>;
 
+const defaultFormValues: FuncionarioFormValues = {
+    razaoSocial: "",
+    cnpj: "",
+    nomeCompleto: "",
+    cpf: "",
+    contato: "",
+    cargoId: "",
+    banco: "",
+    agencia: "",
+    conta: ""
+};
+
 export default function FuncionariosPage() {
-    const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
-    const [cargos, setCargos] = useState<Cargo[]>([]);
-    const [isEditing, setIsEditing] = useState<boolean>(false);
+    const funcionarios = useDataStore((state) => state.funcionarios);
+    const cargos = useDataStore((state) => state.cargos);
     const { role } = useAuthStore();
+    const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<FuncionarioFormValues>({
         resolver: zodResolver(funcionarioSchema),
-        defaultValues: { razaoSocial: "", cnpj: "", nomeCompleto: "", cpf: "", contato: "", cargoId: "", banco: "", agencia: "", conta: "" },
+        defaultValues: defaultFormValues,
     });
-
-    useEffect(() => {
-        const unsubFuncionarios = subscribeToFuncionarios(setFuncionarios);
-        const unsubCargos = subscribeToCargos(setCargos);
-        return () => {
-            unsubFuncionarios();
-            unsubCargos();
-        };
-    }, []);
 
     const funcionariosComCargo = useMemo(() => {
         return funcionarios.map(f => ({
@@ -68,7 +70,7 @@ export default function FuncionariosPage() {
     };
 
     const resetForm = () => {
-        form.reset({ id: "", razaoSocial: "", cnpj: "", nomeCompleto: "", cpf: "", contato: "", cargoId: "", banco: "", agencia: "", conta: "" });
+        form.reset(defaultFormValues);
         setIsEditing(false);
     };
 
@@ -198,7 +200,14 @@ export default function FuncionariosPage() {
         </GenericForm>
     );
 
-    const tableContent = <GenericTable columns={columns} data={funcionariosComCargo} />;
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={funcionariosComCargo}
+            filterPlaceholder="Filtrar por nome..."
+            filterColumnId="nomeCompleto"
+        />
+    );
 
     return (
         <CrudLayout

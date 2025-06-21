@@ -1,50 +1,54 @@
-// app/dashboard/metas/page.tsx
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Meta, metaSchema, addMeta, subscribeToMetas, updateMeta, deleteMeta } from "@/lib/services/metas.services";
-import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
+import { Meta, metaSchema, addMeta, updateMeta, deleteMeta } from "@/lib/services/metas.services";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDataStore } from "@/store/data.store";
+import { useAuthStore } from "@/store/auth.store";
 
 type MetaFormValues = z.infer<typeof metaSchema>;
 
 export default function MetasPage() {
-    const [metas, setMetas] = useState<Meta[]>([]);
-    const [produtos, setProdutos] = useState<Produto[]>([]);
+    const metas = useDataStore((state) => state.metas);
+    const produtos = useDataStore((state) => state.produtos);
+    const unidades = useDataStore((state) => state.unidades);
+    const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<MetaFormValues>({
         resolver: zodResolver(metaSchema),
-        defaultValues: { produtoId: "", metaPorAnimal: 0, unidade: "" },
+        defaultValues: { produtoId: "", metaPorAnimal: 0 },
     });
 
-    useEffect(() => {
-        const unsubMetas = subscribeToMetas(setMetas);
-        const unsubProdutos = subscribeToProdutos(setProdutos);
-        return () => {
-            unsubMetas();
-            unsubProdutos();
-        };
-    }, []);
+    const metasComDetalhes = useMemo(() => {
+        return metas.map((meta: { produtoId: string | undefined; }) => {
+            const produtoAssociado = produtos.find(p => p.id === meta.produtoId);
+            let unidadeNome = "N/A";
+            if (produtoAssociado && produtoAssociado.tipoProduto === 'VENDA' && produtoAssociado.unidadeId) {
+                unidadeNome = unidades.find(u => u.id === produtoAssociado.unidadeId)?.sigla || "N/A";
+            }
 
-    const metasComNomes = useMemo(() => {
-        return metas.map(meta => ({
-            ...meta,
-            produtoNome: produtos.find(p => p.id === meta.produtoId)?.nome || "N/A",
-        }));
-    }, [metas, produtos]);
+            return {
+                ...meta,
+                produtoNome: produtoAssociado?.nome || "N/A",
+                unidade: unidadeNome,
+            };
+        });
+    }, [metas, produtos, unidades]);
 
     const handleEdit = (meta: Meta) => {
         form.reset(meta);
@@ -62,7 +66,7 @@ export default function MetasPage() {
     };
 
     const resetForm = () => {
-        form.reset({ id: "", produtoId: "", metaPorAnimal: 0, unidade: "" });
+        form.reset({ id: "", produtoId: "", metaPorAnimal: 0 });
         setIsEditing(false);
     };
 
@@ -88,12 +92,24 @@ export default function MetasPage() {
         { accessorKey: "unidade", header: "Unidade" },
         {
             id: "actions",
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}><IconTrash className="h-4 w-4" /></Button>
-                </div>
-            )
+            cell: ({ row }) => {
+                const item = row.original;
+                const createdAt = item.createdAt as Timestamp | undefined;
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+
+                return (
+                    <div className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={!isEditable}>
+                            <IconPencil className="h-4 w-4" />
+                        </Button>
+                        {role === 'ADMINISTRADOR' && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}>
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                );
+            }
         },
     ];
 
@@ -108,7 +124,7 @@ export default function MetasPage() {
                             <FormLabel>Produto</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger></FormControl>
-                                <SelectContent>{produtos.map(p => <SelectItem key={p.id} value={p.id!}>{p.nome}</SelectItem>)}</SelectContent>
+                                <SelectContent>{produtos.filter(p => p.tipoProduto === 'VENDA').map(p => <SelectItem key={p.id} value={p.id!}>{p.nome}</SelectItem>)}</SelectContent>
                             </Select>
                             <FormMessage />
                         </FormItem>
@@ -116,9 +132,6 @@ export default function MetasPage() {
                 />
                  <FormField name="metaPorAnimal" control={form.control} render={({ field }) => (
                     <FormItem><FormLabel>Meta por Animal</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField name="unidade" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Unidade</FormLabel><FormControl><Input placeholder="Ex: kg, Un" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
             </div>
             <div className="flex justify-end gap-2 pt-6">
@@ -128,12 +141,21 @@ export default function MetasPage() {
         </GenericForm>
     );
 
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={metasComDetalhes}
+            filterPlaceholder="Filtrar por produto..."
+            filterColumnId="produtoNome"
+        />
+    );
+
     return (
         <CrudLayout
             formTitle={isEditing ? "Editar Meta" : "Nova Meta de Produção"}
             formContent={formContent}
             tableTitle="Metas Cadastradas"
-            tableContent={<GenericTable columns={columns} data={metasComNomes} />}
+            tableContent={tableContent}
         />
     );
 }

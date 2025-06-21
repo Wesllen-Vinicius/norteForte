@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,13 +17,14 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MaskedInput } from "@/components/ui/masked-input";
-import { Cliente, clienteSchema, addCliente, subscribeToClientes, updateCliente, deleteCliente } from "@/lib/services/clientes.services";
+import { Cliente, clienteSchema, addCliente, updateCliente, deleteCliente } from "@/lib/services/clientes.services";
 import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type ClienteFormValues = z.infer<typeof clienteSchema>;
 
 export default function ClientesPage() {
-    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const clientes = useDataStore((state) => state.clientes);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const { role } = useAuthStore();
 
@@ -33,11 +34,6 @@ export default function ClientesPage() {
     });
 
     const tipoPessoa = form.watch("tipoPessoa");
-
-    useEffect(() => {
-        const unsubscribe = subscribeToClientes(setClientes);
-        return () => unsubscribe();
-    }, []);
 
     const handleEdit = (cliente: Cliente) => {
         form.reset(cliente);
@@ -161,7 +157,14 @@ export default function ClientesPage() {
         </GenericForm>
     );
 
-    const tableContent = <GenericTable columns={columns} data={clientes} />;
+    const tableContent = (
+      <GenericTable
+        columns={columns}
+        data={clientes}
+        filterPlaceholder="Filtrar por nome..."
+        filterColumnId="nome"
+      />
+    );
 
     return (
         <CrudLayout

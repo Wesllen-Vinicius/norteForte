@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,31 +8,28 @@ import { ColumnDef } from "@tanstack/react-table";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { addCargo, subscribeToCargos, Cargo, deleteCargo, updateCargo, cargoSchema } from "@/lib/services/cargos.services";
+import { addCargo, Cargo, deleteCargo, updateCargo, cargoSchema } from "@/lib/services/cargos.services";
 import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type CargoFormValues = z.infer<typeof cargoSchema>;
 
 export default function CargosPage() {
-  const [cargos, setCargos] = useState<Cargo[]>([]);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const cargos = useDataStore((state) => state.cargos);
   const { role } = useAuthStore();
+  const [isEditing, setIsEditing] = useState<boolean>(false);
 
   const form = useForm<CargoFormValues>({
     resolver: zodResolver(cargoSchema),
     defaultValues: { id: "", nome: "" },
   });
-
-  useEffect(() => {
-    const unsubscribe = subscribeToCargos(setCargos);
-    return () => unsubscribe();
-  }, []);
 
   const handleEdit = (cargo: Cargo) => {
     form.reset(cargo);
@@ -129,7 +126,12 @@ export default function CargosPage() {
   );
 
   const tableContent = (
-    <GenericTable columns={columns} data={cargos} />
+    <GenericTable
+        columns={columns}
+        data={cargos}
+        filterPlaceholder="Filtrar por cargo..."
+        filterColumnId="nome"
+    />
   );
 
   return (

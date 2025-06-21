@@ -1,17 +1,20 @@
+// lib/services/unidades.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
 import { z } from "zod";
 
 export const unidadeSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(1, 'O nome da unidade é obrigatório.'),
   sigla: z.string().min(1, 'A sigla é obrigatória.').max(10, 'A sigla deve ter no máximo 10 caracteres.'),
+  createdAt: z.any().optional(),
 });
 
 export type Unidade = z.infer<typeof unidadeSchema>;
 
-export const addUnidade = async (unidade: Omit<Unidade, 'id'>) => {
-  const docRef = await addDoc(collection(db, "unidades"), unidade);
+export const addUnidade = async (unidade: Omit<Unidade, 'id' | 'createdAt'>) => {
+  const dataWithTimestamp = { ...unidade, createdAt: serverTimestamp() };
+  const docRef = await addDoc(collection(db, "unidades"), dataWithTimestamp);
   return docRef.id;
 };
 
@@ -25,7 +28,7 @@ export const subscribeToUnidades = (callback: (unidades: Unidade[]) => void) => 
   });
 };
 
-export const updateUnidade = async (id: string, unidade: Partial<Omit<Unidade, 'id'>>) => {
+export const updateUnidade = async (id: string, unidade: Partial<Omit<Unidade, 'id' | 'createdAt'>>) => {
   const unidadeDoc = doc(db, "unidades", id);
   await updateDoc(unidadeDoc, unidade);
 };

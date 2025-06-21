@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,21 +17,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/date-picker";
 
-import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
-import { Cliente, subscribeToClientes } from "@/lib/services/clientes.services";
+import { useDataStore } from "@/store/data.store";
 import { vendaSchema, registrarVenda } from "@/lib/services/vendas.services";
+import { Produto } from "@/lib/services/produtos.services";
 
 type VendaFormValues = z.infer<typeof vendaSchema>;
 
+const defaultFormValues: VendaFormValues = {
+    clienteId: "",
+    data: new Date(),
+    produtos: [],
+    condicaoPagamento: "A_VISTA",
+    valorTotal: 0
+};
+
 export default function VendasPage() {
-    const [produtos, setProdutos] = useState<Produto[]>([]);
-    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const { produtos, clientes } = useDataStore();
 
     const produtosParaVenda = useMemo(() => produtos.filter(p => p.tipoProduto === 'VENDA'), [produtos]);
 
     const form = useForm<VendaFormValues>({
         resolver: zodResolver(vendaSchema),
-        defaultValues: { clienteId: "", data: new Date(), produtos: [], condicaoPagamento: undefined, valorTotal: 0 },
+        defaultValues: defaultFormValues,
     });
 
     const { fields, append, remove } = useFieldArray({
@@ -41,15 +48,6 @@ export default function VendasPage() {
 
     const watchedProdutos = useWatch({ control: form.control, name: 'produtos' });
     const condicaoPagamento = form.watch('condicaoPagamento');
-
-    useEffect(() => {
-        const unsubProdutos = subscribeToProdutos(setProdutos);
-        const unsubClientes = subscribeToClientes(setClientes);
-        return () => {
-            unsubProdutos();
-            unsubClientes();
-        };
-    }, []);
 
     useEffect(() => {
         const total = watchedProdutos.reduce((acc, item) => acc + (item.quantidade * item.precoUnitario || 0), 0);
@@ -73,7 +71,7 @@ export default function VendasPage() {
 
             await registrarVenda(values, cliente.nome);
             toast.success("Venda registrada com sucesso!");
-            form.reset();
+            form.reset(defaultFormValues);
             remove();
        } catch (error: any) {
            toast.error("Falha ao registrar venda", { description: error.message });

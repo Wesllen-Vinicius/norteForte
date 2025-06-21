@@ -1,43 +1,45 @@
 // app/dashboard/fornecedores/page.tsx
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Fornecedor, fornecedorSchema, addFornecedor, subscribeToFornecedores, updateFornecedor, deleteFornecedor } from "@/lib/services/fornecedores.services";
+import { Fornecedor, fornecedorSchema, addFornecedor, updateFornecedor, deleteFornecedor } from "@/lib/services/fornecedores.services";
 import { Separator } from "@/components/ui/separator";
+import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type FornecedorFormValues = z.infer<typeof fornecedorSchema>;
 
+const defaultFormValues: FornecedorFormValues = {
+    razaoSocial: "",
+    cnpj: "",
+    contato: "",
+    endereco: "",
+    dadosBancarios: { banco: "", agencia: "", conta: "", pix: "" }
+};
+
 export default function FornecedoresPage() {
-    const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+    const fornecedores = useDataStore((state) => state.fornecedores);
+    const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<FornecedorFormValues>({
         resolver: zodResolver(fornecedorSchema),
-        defaultValues: {
-            razaoSocial: "",
-            cnpj: "",
-            contato: "",
-            endereco: "",
-            dadosBancarios: { banco: "", agencia: "", conta: "", pix: "" }
-        },
+        defaultValues: defaultFormValues,
     });
-
-    useEffect(() => {
-        const unsubscribe = subscribeToFornecedores(setFornecedores);
-        return () => unsubscribe();
-    }, []);
 
     const handleEdit = (fornecedor: Fornecedor) => {
         form.reset(fornecedor);
@@ -55,14 +57,7 @@ export default function FornecedoresPage() {
     };
 
     const resetForm = () => {
-        form.reset({
-            id: undefined,
-            razaoSocial: "",
-            cnpj: "",
-            contato: "",
-            endereco: "",
-            dadosBancarios: { banco: "", agencia: "", conta: "", pix: "" }
-        });
+        form.reset(defaultFormValues);
         setIsEditing(false);
     };
 
@@ -88,12 +83,24 @@ export default function FornecedoresPage() {
         { accessorKey: "contato", header: "Contato" },
         {
             id: "actions",
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}><IconTrash className="h-4 w-4" /></Button>
-                </div>
-            )
+            cell: ({ row }) => {
+                const item = row.original;
+                const createdAt = item.createdAt as Timestamp | undefined;
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+
+                return (
+                    <div className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isEditable}>
+                            <IconPencil className="h-4 w-4" />
+                        </Button>
+                        {role === 'ADMINISTRADOR' && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(item.id!)}>
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                );
+            }
         },
     ];
 
@@ -139,7 +146,14 @@ export default function FornecedoresPage() {
         </GenericForm>
     );
 
-    const tableContent = <GenericTable columns={columns} data={fornecedores} />;
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={fornecedores}
+            filterPlaceholder="Filtrar por razão social..."
+            filterColumnId="razaoSocial"
+        />
+    );
 
     return (
         <CrudLayout

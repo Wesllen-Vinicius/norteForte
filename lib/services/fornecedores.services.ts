@@ -1,9 +1,8 @@
 // lib/services/fornecedores.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
 import { z } from "zod";
 
-// Schema para os dados bancários
 const dadosBancariosSchema = z.object({
   banco: z.string().min(1, "O nome do banco é obrigatório."),
   agencia: z.string().min(1, "A agência é obrigatória."),
@@ -11,22 +10,22 @@ const dadosBancariosSchema = z.object({
   pix: z.string().optional().or(z.literal("")),
 });
 
-// Schema principal para o fornecedor
 export const fornecedorSchema = z.object({
   id: z.string().optional(),
   razaoSocial: z.string().min(3, "A Razão Social é obrigatória."),
-  cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."), // 18 com a máscara
+  cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
   contato: z.string().min(10, "O telefone de contato é obrigatório."),
   endereco: z.string().min(5, "O endereço é obrigatório."),
   dadosBancarios: dadosBancariosSchema,
+  createdAt: z.any().optional(), // Adicionado para controle de permissão
 });
 
 export type Fornecedor = z.infer<typeof fornecedorSchema>;
 
-// Adicionar um novo fornecedor
-export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id'>) => {
+export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id' | 'createdAt'>) => {
   try {
-    const docRef = await addDoc(collection(db, "fornecedores"), fornecedor);
+    const dataWithTimestamp = { ...fornecedor, createdAt: serverTimestamp() };
+    const docRef = await addDoc(collection(db, "fornecedores"), dataWithTimestamp);
     return docRef.id;
   } catch (e) {
     console.error("Erro ao adicionar fornecedor: ", e);
@@ -34,7 +33,6 @@ export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id'>) => {
   }
 };
 
-// Escutar atualizações em tempo real para fornecedores
 export const subscribeToFornecedores = (callback: (fornecedores: Fornecedor[]) => void) => {
   const unsubscribe = onSnapshot(collection(db, "fornecedores"), (querySnapshot: QuerySnapshot<DocumentData>) => {
     const fornecedores: Fornecedor[] = [];
@@ -46,13 +44,11 @@ export const subscribeToFornecedores = (callback: (fornecedores: Fornecedor[]) =
   return unsubscribe;
 };
 
-// Atualizar um fornecedor existente
 export const updateFornecedor = async (id: string, fornecedor: Partial<Omit<Fornecedor, 'id'>>) => {
   const fornecedorDoc = doc(db, "fornecedores", id);
   await updateDoc(fornecedorDoc, fornecedor);
 };
 
-// Deletar um fornecedor
 export const deleteFornecedor = async (id: string) => {
   const fornecedorDoc = doc(db, "fornecedores", id);
   await deleteDoc(fornecedorDoc);

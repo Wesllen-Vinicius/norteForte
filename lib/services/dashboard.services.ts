@@ -1,65 +1,78 @@
+// lib/services/dashboard.services.ts
 import { db } from "@/lib/firebase";
 import { collection, getCountFromServer, getDocs, query, where, Timestamp, orderBy } from "firebase/firestore";
 import { format } from 'date-fns';
 
-const getLucroBrutoMes = async () => {
+const getCollectionCount = async (collectionName: string) => {
+    const coll = collection(db, collectionName);
+    const snapshot = await getCountFromServer(coll);
+    return snapshot.data().count;
+};
+
+const getVendasMes = async () => {
     const vendasRef = collection(db, "vendas");
     const hoje = new Date();
     const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const q = query(vendasRef, where("data", ">=", Timestamp.fromDate(primeiroDiaMes)));
 
     const querySnapshot = await getDocs(q);
-    let lucroTotal = 0;
+    let valorTotal = 0;
+    let lucroBruto = 0;
 
     querySnapshot.forEach(doc => {
         const venda = doc.data();
+        if (venda && typeof venda.valorTotal === 'number') {
+            valorTotal += venda.valorTotal;
+        }
         if (Array.isArray(venda.produtos)) {
             venda.produtos.forEach((item: any) => {
                 if (typeof item.precoUnitario === 'number' && typeof item.custoUnitario === 'number' && typeof item.quantidade === 'number') {
-                    const lucroItem = (item.precoUnitario - item.custoUnitario) * item.quantidade;
-                    lucroTotal += lucroItem;
+                    lucroBruto += (item.precoUnitario - item.custoUnitario) * item.quantidade;
                 }
             });
         }
     });
-    return lucroTotal;
+    return { valorTotal, lucroBruto };
 };
 
+const getContasResumo = async () => {
+    const contasAPagarRef = collection(db, "contasAPagar");
+    const contasAReceberRef = collection(db, "contasAReceber");
+
+    const qPagar = query(contasAPagarRef, where("status", "==", "Pendente"));
+    const qReceber = query(contasAReceberRef, where("status", "==", "Pendente"));
+
+    const [pagarSnapshot, receberSnapshot] = await Promise.all([
+        getDocs(qPagar),
+        getDocs(qReceber)
+    ]);
+
+    const totalAPagar = pagarSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalAReceber = receberSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+
+    return { totalAPagar, totalAReceber };
+}
+
 export const getDashboardStats = async () => {
-    const getCollectionCount = async (collectionName: string) => {
-        const collectionRef = collection(db, collectionName);
-        const snapshot = await getCountFromServer(collectionRef);
-        return snapshot.data().count;
-    };
-
-    const getTotalVendasMes = async () => {
-        const vendasRef = collection(db, "vendas");
-        const hoje = new Date();
-        const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-        const q = query(vendasRef, where("data", ">=", Timestamp.fromDate(primeiroDiaMes)));
-        const querySnapshot = await getDocs(q);
-        let total = 0;
-        querySnapshot.forEach(doc => {
-            const data = doc.data();
-            if (data && typeof data.valorTotal === 'number') {
-                total += data.valorTotal;
-            }
-        });
-        return total;
-    };
-
-    const [totalFuncionarios, totalProdutos, totalClientes, totalVendasMes, lucroBrutoMes] = await Promise.all([
+    const [totalFuncionarios, totalProdutos, totalClientes, vendasMes, contasResumo] = await Promise.all([
         getCollectionCount("funcionarios"),
         getCollectionCount("produtos"),
         getCollectionCount("clientes"),
-        getTotalVendasMes(),
-        getLucroBrutoMes(),
+        getVendasMes(),
+        getContasResumo(),
     ]);
 
-    return { totalFuncionarios, totalProdutos, totalClientes, totalVendasMes, lucroBrutoMes };
+    return {
+        totalFuncionarios,
+        totalProdutos,
+        totalClientes,
+        totalVendasMes: vendasMes.valorTotal,
+        lucroBrutoMes: vendasMes.lucroBruto,
+        totalAPagar: contasResumo.totalAPagar,
+        totalAReceber: contasResumo.totalAReceber,
+    };
 };
 
-// Busca e agrega os dados para o gráfico de movimentações dos últimos 30 dias
 export const getMovimentacoesParaGrafico = async () => {
     const movimentacoesRef = collection(db, "movimentacoesEstoque");
     const hoje = new Date();
@@ -98,7 +111,6 @@ export const getMovimentacoesParaGrafico = async () => {
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 };
 
-// Nova função para buscar os produtos mais vendidos (agora mais robusta)
 export const getProdutosMaisVendidos = async () => {
     const vendasRef = collection(db, "vendas");
     const trintaDiasAtras = new Date(new Date().setDate(new Date().getDate() - 30));
@@ -109,8 +121,6 @@ export const getProdutosMaisVendidos = async () => {
 
     querySnapshot.forEach(doc => {
         const venda = doc.data();
-
-        // VERIFICAÇÃO DE SEGURANÇA: Garante que 'produtos' seja um array antes de iterar
         if (Array.isArray(venda.produtos) && venda.produtos.length > 0) {
             venda.produtos.forEach((item: any) => {
                 if (item && item.produtoId && typeof item.quantidade === 'number') {
@@ -126,5 +136,49 @@ export const getProdutosMaisVendidos = async () => {
 
     return Object.values(contagemProdutos)
         .sort((a,b) => b.quantidade - a.quantidade)
-        .slice(0, 5); // Retorna o top 5
+        .slice(0, 5);
+}
+
+export const getVendasPorCondicao = async () => {
+    const vendasRef = collection(db, "vendas");
+    const hoje = new Date();
+    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const q = query(vendasRef, where("data", ">=", Timestamp.fromDate(primeiroDiaMes)));
+    const querySnapshot = await getDocs(q);
+
+    let aVista = 0;
+    let aPrazo = 0;
+
+    querySnapshot.forEach(doc => {
+        if(doc.data().condicaoPagamento === 'A_VISTA') aVista++;
+        if(doc.data().condicaoPagamento === 'A_PRAZO') aPrazo++;
+    });
+
+    return [{ name: "À Vista", value: aVista, fill: "hsl(var(--chart-1))" }, { name: "A Prazo", value: aPrazo, fill: "hsl(var(--chart-2))" }];
+}
+
+export const getProducaoResumoPeriodo = async () => {
+    const producoesRef = collection(db, "producoes");
+    const hoje = new Date();
+    const trintaDiasAtras = new Date(new Date().setDate(hoje.getDate() - 30));
+    const q = query(producoesRef, where("data", ">=", Timestamp.fromDate(trintaDiasAtras)));
+    const querySnapshot = await getDocs(q);
+
+    let produzido = 0;
+    let perdas = 0;
+
+    querySnapshot.forEach(doc => {
+        const producao = doc.data();
+        if(Array.isArray(producao.produtos)) {
+            producao.produtos.forEach((item: any) => {
+                produzido += item.quantidade || 0;
+                perdas += item.perda || 0;
+            });
+        }
+    });
+
+    const total = produzido + perdas;
+    const rendimento = total > 0 ? (produzido / total) * 100 : 0;
+
+    return { produzido, perdas, rendimento };
 }

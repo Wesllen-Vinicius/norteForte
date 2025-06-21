@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
@@ -16,20 +16,18 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Produto, addProduto, subscribeToProdutos, updateProduto, deleteProduto, produtoVendaSchema, produtoUsoInternoSchema, ProdutoVenda, ProdutoUsoInterno } from "@/lib/services/produtos.services";
-import { Unidade, subscribeToUnidades } from "@/lib/services/unidades.services";
-import { Categoria, subscribeToCategorias } from "@/lib/services/categorias.services";
+import { Produto, addProduto, updateProduto, deleteProduto, produtoVendaSchema, produtoUsoInternoSchema, ProdutoVenda, ProdutoUsoInterno } from "@/lib/services/produtos.services";
 import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type FormType = "VENDA" | "USO_INTERNO";
 
 export default function ProdutosPage() {
-    const [produtos, setProdutos] = useState<Produto[]>([]);
-    const [unidades, setUnidades] = useState<Unidade[]>([]);
-    const [categorias, setCategorias] = useState<Categoria[]>([]);
+    const { produtos, unidades, categorias } = useDataStore();
+    const { role } = useAuthStore();
+
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [currentForm, setCurrentForm] = useState<FormType | null>(null);
-    const { role } = useAuthStore();
 
     const formVenda = useForm<ProdutoVenda>({
         resolver: zodResolver(produtoVendaSchema),
@@ -40,17 +38,6 @@ export default function ProdutosPage() {
         resolver: zodResolver(produtoUsoInternoSchema),
         defaultValues: { tipoProduto: "USO_INTERNO", nome: "", categoriaId: "", custoUnitario: 0 },
     });
-
-    useEffect(() => {
-        const unsubProdutos = subscribeToProdutos(setProdutos);
-        const unsubUnidades = subscribeToUnidades(setUnidades);
-        const unsubCategorias = subscribeToCategorias(setCategorias);
-        return () => {
-            unsubProdutos();
-            unsubUnidades();
-            unsubCategorias();
-        };
-    }, []);
 
     const produtosComNomes = useMemo(() => {
         return produtos.map(p => {
@@ -86,8 +73,8 @@ export default function ProdutosPage() {
     };
 
     const resetForms = () => {
-        formVenda.reset();
-        formUsoInterno.reset();
+        formVenda.reset({ tipoProduto: "VENDA", nome: "", unidadeId: "", precoVenda: 0, custoUnitario: 0, sku: "", ncm: "" });
+        formUsoInterno.reset({ tipoProduto: "USO_INTERNO", nome: "", categoriaId: "", custoUnitario: 0 });
         setIsEditing(false);
         setCurrentForm(null);
     };
@@ -117,7 +104,7 @@ export default function ProdutosPage() {
             cell: ({ row }) => {
                 const p = row.original;
                 if (p.tipoProduto === "VENDA") return `Preço: R$ ${p.precoVenda.toFixed(2)} | Custo: R$ ${(p.custoUnitario || 0).toFixed(2)}`;
-                if (p.tipoProduto === "USO_INTERNO") return `Custo: R$ ${p.custoUnitario.toFixed(2)} (${p.categoriaNome || 'N/A'})`;
+                if (p.tipoProduto === "USO_INTERNO") return `Custo: R$ ${p.custoUnitario.toFixed(2)} (${(p as any).categoriaNome || 'N/A'})`;
                 return null;
             },
         },
@@ -215,12 +202,21 @@ export default function ProdutosPage() {
       </div>
     );
 
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={produtosComNomes}
+            filterPlaceholder="Filtrar por descrição..."
+            filterColumnId="nome"
+        />
+    );
+
     return (
         <CrudLayout
             formTitle={isEditing ? "Editar Produto" : "Novo Produto"}
             formContent={formContent}
             tableTitle="Produtos Cadastrados"
-            tableContent={<GenericTable columns={columns} data={produtosComNomes} />}
+            tableContent={tableContent}
         />
     );
 }

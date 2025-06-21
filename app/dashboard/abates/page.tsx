@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,8 @@ import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -15,27 +17,34 @@ import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/date-picker";
-import { Abate, abateSchema, addAbate, subscribeToAbates, updateAbate, deleteAbate } from "@/lib/services/abates.services";
-import { AnaliseAbate } from "@/components/analise-abate"; // Importa o novo componente
+import { Abate, abateSchema, addAbate, updateAbate, deleteAbate } from "@/lib/services/abates.services";
+import { AnaliseAbate } from "@/components/analise-abate";
+import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type AbateFormValues = z.infer<typeof abateSchema>;
 
 export default function AbatesPage() {
-    const [abates, setAbates] = useState<Abate[]>([]);
+    const abates = useDataStore((state) => state.abates);
+    const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<AbateFormValues>({
-        resolver: zodResolver(abateSchema)
+        resolver: zodResolver(abateSchema),
+        defaultValues: {
+            data: new Date(),
+            total: 0,
+            boi: 0,
+            vaca: 0,
+            condenado: 0,
+        }
     });
 
-    useEffect(() => {
-        const unsubscribe = subscribeToAbates(setAbates);
-        return () => unsubscribe();
-    }, []);
-
-    // ... (handleEdit, handleDelete, resetForm, onSubmit continuam os mesmos)
     const handleEdit = (abate: Abate) => {
-        form.reset(abate);
+        form.reset({
+            ...abate,
+            data: (abate.data as unknown as Timestamp).toDate(),
+        });
         setIsEditing(true);
     };
 
@@ -50,7 +59,13 @@ export default function AbatesPage() {
     };
 
     const resetForm = () => {
-        form.reset({ id: undefined, data: undefined, total: 0, boi: 0, vaca: 0, condenado: 0 });
+        form.reset({
+            data: new Date(),
+            total: 0,
+            boi: 0,
+            vaca: 0,
+            condenado: 0,
+        });
         setIsEditing(false);
     };
 
@@ -71,19 +86,35 @@ export default function AbatesPage() {
     };
 
     const columns: ColumnDef<Abate>[] = [
-        { accessorKey: "data", header: "Data", cell: ({ row }) => format(row.original.data, "dd/MM/yyyy") },
+        {
+            accessorKey: "data",
+            header: "Data",
+            cell: ({ row }) => format(row.original.data as Date, "dd/MM/yyyy")
+        },
         { accessorKey: "total", header: "Total" },
         { accessorKey: "boi", header: "Boi" },
         { accessorKey: "vaca", header: "Vaca" },
         { accessorKey: "condenado", header: "Condenado" },
         {
             id: "actions",
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}><IconTrash className="h-4 w-4" /></Button>
-                </div>
-            )
+            cell: ({ row }) => {
+                const item = row.original;
+                const createdAt = item.createdAt as Timestamp | undefined;
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+
+                return(
+                    <div className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={!isEditable}>
+                            <IconPencil className="h-4 w-4" />
+                        </Button>
+                        {role === 'ADMINISTRADOR' && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}>
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                )
+            }
         },
     ];
 
@@ -115,19 +146,25 @@ export default function AbatesPage() {
       </GenericForm>
     );
 
-    const tableContent = <GenericTable columns={columns} data={abates} />;
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={abates}
+            filterPlaceholder="Filtrar por total..."
+            filterColumnId="total"
+        />
+    );
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 space-y-8">
-            {/* Componente de Análise inserido aqui */}
-            <AnaliseAbate />
-
             <CrudLayout
                 formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
                 formContent={formContent}
                 tableTitle="Histórico de Abates"
                 tableContent={tableContent}
             />
+
+            <AnaliseAbate />
         </div>
     );
 }

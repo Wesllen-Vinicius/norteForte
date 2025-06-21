@@ -1,35 +1,35 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Unidade, unidadeSchema, addUnidade, subscribeToUnidades, updateUnidade, deleteUnidade } from "@/lib/services/unidades.services";
+import { Unidade, unidadeSchema, addUnidade, updateUnidade, deleteUnidade } from "@/lib/services/unidades.services";
+import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
 
 type UnidadeFormValues = z.infer<typeof unidadeSchema>;
 
 export default function UnidadesPage() {
-    const [unidades, setUnidades] = useState<Unidade[]>([]);
+    const unidades = useDataStore((state) => state.unidades);
+    const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
     const form = useForm<UnidadeFormValues>({
         resolver: zodResolver(unidadeSchema),
         defaultValues: { nome: "", sigla: "" },
     });
-
-    useEffect(() => {
-        const unsubscribe = subscribeToUnidades(setUnidades);
-        return () => unsubscribe();
-    }, []);
 
     const handleEdit = (unidade: Unidade) => {
         form.reset(unidade);
@@ -72,12 +72,24 @@ export default function UnidadesPage() {
         { accessorKey: "sigla", header: "Sigla" },
         {
             id: "actions",
-            cell: ({ row }) => (
-                <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}><IconTrash className="h-4 w-4" /></Button>
-                </div>
-            )
+            cell: ({ row }) => {
+                const item = row.original;
+                const createdAt = item.createdAt as Timestamp | undefined;
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+
+                return (
+                    <div className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={!isEditable}>
+                            <IconPencil className="h-4 w-4" />
+                        </Button>
+                        {role === 'ADMINISTRADOR' && (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}>
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
+                );
+            }
         },
     ];
 
@@ -98,12 +110,21 @@ export default function UnidadesPage() {
         </GenericForm>
     );
 
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={unidades}
+            filterPlaceholder="Filtrar por nome..."
+            filterColumnId="nome"
+        />
+    );
+
     return (
         <CrudLayout
             formTitle={isEditing ? "Editar Unidade" : "Nova Unidade de Medida"}
             formContent={formContent}
             tableTitle="Unidades Cadastradas"
-            tableContent={<GenericTable columns={columns} data={unidades} />}
+            tableContent={tableContent}
         />
     );
 }

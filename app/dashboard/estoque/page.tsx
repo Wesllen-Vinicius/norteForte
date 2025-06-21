@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,22 +15,20 @@ import { CardDescription } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Produto, subscribeToProdutos } from "@/lib/services/produtos.services";
+import { Produto } from "@/lib/services/produtos.services";
 import { registrarMovimentacao, movimentacaoSchema } from "@/lib/services/estoque.services";
+import { useDataStore } from "@/store/data.store";
 
 type MovimentacaoFormValues = z.infer<typeof movimentacaoSchema>;
 
 export default function EstoquePage() {
-    const [produtos, setProdutos] = useState<Produto[]>([]);
+    const produtos = useDataStore((state) => state.produtos);
+    const unidades = useDataStore((state) => state.unidades);
+
     const form = useForm<MovimentacaoFormValues>({
         resolver: zodResolver(movimentacaoSchema),
         defaultValues: { produtoId: "", quantidade: 0, tipo: undefined, motivo: "" }
     });
-
-    useEffect(() => {
-        const unsubscribe = subscribeToProdutos(setProdutos);
-        return () => unsubscribe();
-    }, []);
 
     const onSubmit = async (values: MovimentacaoFormValues) => {
         const produtoSelecionado = produtos.find(p => p.id === values.produtoId);
@@ -61,12 +58,13 @@ export default function EstoquePage() {
             header: "Quantidade em Estoque",
             cell: ({ row }) => {
                 const produto = row.original;
-                let unidadeSigla = 'N/A';
-                if (produto.tipoProduto === 'VENDA') {
-                  unidadeSigla = "unidade";
-                } else {
-                  unidadeSigla = "unidade";
+                let unidadeSigla = 'un';
+
+                if (produto.tipoProduto === 'VENDA' && produto.unidadeId) {
+                  const unidade = unidades.find(u => u.id === produto.unidadeId);
+                  unidadeSigla = unidade?.sigla || 'un';
                 }
+
                 return `${produto.quantidade || 0} ${unidadeSigla}`;
             }
         },
@@ -126,7 +124,14 @@ export default function EstoquePage() {
       </>
     );
 
-    const tableContent = <GenericTable columns={columns} data={produtos} />;
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={produtos}
+            filterPlaceholder="Filtrar por produto..."
+            filterColumnId="nome"
+        />
+    );
 
     return (
         <CrudLayout

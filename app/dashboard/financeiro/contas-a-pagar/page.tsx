@@ -6,11 +6,11 @@ import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
-import { Fornecedor, subscribeToFornecedores } from "@/lib/services/fornecedores.services";
 import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useDataStore } from "@/store/data.store";
 
 interface ContaAPagar {
     id: string;
@@ -24,18 +24,16 @@ interface ContaAPagar {
 
 export default function ContasAPagarPage() {
     const [contas, setContas] = useState<ContaAPagar[]>([]);
-    const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+    const fornecedores = useDataStore((state) => state.fornecedores);
 
     useEffect(() => {
         const unsubContas = onSnapshot(collection(db, "contasAPagar"), (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ContaAPagar));
             setContas(data);
         });
-        const unsubFornecedores = subscribeToFornecedores(setFornecedores);
 
         return () => {
             unsubContas();
-            unsubFornecedores();
         };
     }, []);
 
@@ -84,7 +82,12 @@ export default function ContasAPagarPage() {
                     <CardDescription>Visualize e gerencie as contas pendentes de pagamento.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <GenericTable columns={columns} data={contasComFornecedor} />
+                    <GenericTable
+                        columns={columns}
+                        data={contasComFornecedor}
+                        filterPlaceholder="Filtrar por fornecedor..."
+                        filterColumnId="fornecedorNome"
+                    />
                 </CardContent>
             </Card>
         </div>
