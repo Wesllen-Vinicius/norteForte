@@ -2,19 +2,25 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { z } from "zod";
 
+// Schema atualizado com os novos campos
 export const abateSchema = z.object({
   id: z.string().optional(),
   data: z.date({ required_error: "A data é obrigatória." }),
   total: z.coerce.number().positive("O total deve ser maior que zero."),
-  boi: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
-  vaca: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
   condenado: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
+  responsavelId: z.string().min(1, "O responsável é obrigatório."),
+  registradoPor: z.object({
+    uid: z.string(),
+    nome: z.string(),
+  }),
   createdAt: z.any().optional(),
 });
 
-export type Abate = z.infer<typeof abateSchema>;
+// Tipo atualizado para incluir nomes para exibição na tabela
+export type Abate = z.infer<typeof abateSchema> & { responsavelNome?: string };
 
-export const addAbate = async (abate: Omit<Abate, 'id'>) => {
+// Função de adicionar atualizada para receber os dados do usuário que registra
+export const addAbate = async (abate: Omit<Abate, 'id' | 'createdAt' | 'responsavelNome'>) => {
   try {
     const dataWithTimestamp = {
         ...abate,
@@ -27,6 +33,8 @@ export const addAbate = async (abate: Omit<Abate, 'id'>) => {
   }
 };
 
+// As outras funções (subscribeToAbates, updateAbate, deleteAbate) podem permanecer como estão,
+// mas a 'updateAbate' agora receberá um objeto com a nova estrutura.
 export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
   const q = collection(db, "abates");
   const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -44,7 +52,7 @@ export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
   return unsubscribe;
 };
 
-export const updateAbate = async (id: string, abate: Omit<Abate, 'id'>) => {
+export const updateAbate = async (id: string, abate: Partial<Omit<Abate, 'id' | 'createdAt' | 'responsavelNome'>>) => {
   const abateDoc = doc(db, "abates", id);
   await updateDoc(abateDoc, abate);
 };
