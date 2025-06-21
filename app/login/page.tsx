@@ -1,36 +1,31 @@
+// app/login/page.tsx
 "use client"
 
-import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/store/auth.store";
+import { IconLoader, IconMeat } from "@tabler/icons-react";
+
 import { loginSchema, signInWithEmail } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { IconMeat } from "@tabler/icons-react";
-import { LoadingIndicator } from "@/components/loading-indicator";
+import { LoginGuard } from "@/components/login-guard";
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const { user, isLoading } = useAuthStore();
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },
     });
 
-    useEffect(() => {
-        if (!isLoading && user) {
-            router.push('/dashboard');
-        }
-    }, [user, isLoading, router]);
+    const { isSubmitting } = form.formState;
 
     const onSubmit = async (values: LoginFormValues) => {
         const promise = signInWithEmail(values);
@@ -40,50 +35,59 @@ export default function LoginPage() {
                 router.push('/dashboard');
                 return "Login realizado com sucesso!";
             },
-            error: "Falha no login. Verifique seu e-mail e senha.",
+            error: (err) => {
+                // Aprimorando a mensagem de erro
+                if (err.code === 'auth/invalid-credential') {
+                    return "Credenciais inválidas. Verifique seu e-mail e senha.";
+                }
+                return "Falha no login. Tente novamente.";
+            },
         });
     };
 
-    if (isLoading || user) {
-        return <LoadingIndicator />;
-    }
-
     return (
-        <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-            <div className="w-full max-w-md">
-                <div className="flex justify-center mb-6">
-                   <IconMeat size={48} className="text-primary"/>
+        <LoginGuard>
+            <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-muted/20 to-muted/80 p-4">
+                <div className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
+                    <Card className="shadow-2xl shadow-primary/10">
+                        <CardHeader className="text-center">
+                            <CardTitle className="text-3xl font-bold">Norte Forte</CardTitle>
+                            <CardDescription>Acesso ao sistema de gestão</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
+                                <div className="space-y-4">
+                                    <FormField name="email" control={form.control} render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>E-mail</FormLabel>
+                                            <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                    <FormField name="password" control={form.control} render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Senha</FormLabel>
+                                            <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )} />
+                                </div>
+                            </GenericForm>
+                             <Button type="submit" form="login-form" className="w-full mt-6" size="lg" disabled={isSubmitting}>
+                                {isSubmitting ? (
+                                    <>
+                                        <IconLoader className="mr-2 h-4 w-4 animate-spin" />
+                                        Entrando...
+                                    </>
+                                ) : "Entrar"}
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </div>
-                <Card className="shadow-xl">
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-2xl">Acesso ao Dashboard</CardTitle>
-                        <CardDescription>Utilize suas credenciais para entrar.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
-                            <div className="space-y-4">
-                                <FormField name="email" control={form.control} render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>E-mail</FormLabel>
-                                        <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                <FormField name="password" control={form.control} render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Senha</FormLabel>
-                                        <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                            </div>
-                        </GenericForm>
-                         <Button type="submit" form="login-form" className="w-full mt-6" size="lg">
-                            Entrar
-                        </Button>
-                    </CardContent>
-                </Card>
+                 <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
+                    &copy; {new Date().getFullYear()} Norte Forte. Todos os direitos reservados.
+                </footer>
             </div>
-        </div>
+        </LoginGuard>
     );
 }

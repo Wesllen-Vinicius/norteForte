@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { Timestamp } from "firebase/firestore";
-
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
