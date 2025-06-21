@@ -152,3 +152,16 @@
     animation: shimmer 2s infinite;
   }
 }
+
+/* Oculta a barra de rolagem da sidebar, mas mantém a funcionalidade */
+[data-slot="sidebar-content"] {
+  /* Para Firefox */
+  scrollbar-width: none;
+  /* Para IE e Edge */
+  -ms-overflow-style: none;
+}
+
+/* Para Chrome, Safari e Opera */
+[data-slot="sidebar-content"]::-webkit-scrollbar {
+  display: none;
+}

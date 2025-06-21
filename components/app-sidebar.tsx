@@ -3,10 +3,11 @@
 import Link from "next/link";
 import * as React from "react"
 import { usePathname } from "next/navigation";
-import { type Icon, IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog } from "@tabler/icons-react"
+import { useNavigationStore } from "@/store/navigation.store";
+import { type Icon, IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog, IconTargetArrow } from "@tabler/icons-react"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
-import { IconTargetArrow } from "@tabler/icons-react";
+
 const navLinks = [
   { title: "Dashboard", url: "/dashboard", icon: IconDashboard, group: "Análise" },
   { title: "Relatórios", url: "/dashboard/relatorios", icon: IconReportAnalytics, group: "Análise" },
@@ -38,6 +39,7 @@ const getGroupedNav = () => {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const groupedNav = getGroupedNav();
+  const { setIsNavigating } = useNavigationStore();
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -62,10 +64,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           ? pathname === item.url
                           : pathname.startsWith(item.url);
 
+                        const handleClick = () => {
+                            if (item.url !== pathname) {
+                                setIsNavigating(true);
+                            }
+                        };
+
                         return (
                             <SidebarMenuItem key={item.title}>
                             <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-                                <Link href={item.url}>
+                                <Link href={item.url} onClick={handleClick}>
                                     {item.icon && <item.icon />}
                                     <span>{item.title}</span>
                                 </Link>
