@@ -10,9 +10,6 @@ export const abateSchema = z.object({
   vaca: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
   condenado: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
   createdAt: z.any().optional(),
-}).refine(data => data.total === data.boi + data.vaca, {
-    message: "O total de abates deve ser a soma de bois e vacas.",
-    path: ["total"],
 });
 
 export type Abate = z.infer<typeof abateSchema>;

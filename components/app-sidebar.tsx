@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { type Icon, IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog } from "@tabler/icons-react"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
-
+import { IconTargetArrow } from "@tabler/icons-react";
 const navLinks = [
   { title: "Dashboard", url: "/dashboard", icon: IconDashboard, group: "Análise" },
   { title: "Relatórios", url: "/dashboard/relatorios", icon: IconReportAnalytics, group: "Análise" },
@@ -24,6 +24,7 @@ const navLinks = [
   { title: "Produtos", url: "/dashboard/produtos", icon: IconPackages, group: "Cadastros" },
   { title: "Unidades", url: "/dashboard/unidades", icon: IconRuler, group: "Cadastros" },
   { title: "Categorias", url: "/dashboard/categorias", icon: IconCategory, group: "Cadastros" },
+  { title: "Metas de Produção", url: "/dashboard/metas", icon: IconTargetArrow, group: "Cadastros" },
   { title: "Usuários", url: "/dashboard/usuarios", icon: IconUserCog, group: "Sistema" },
 ];
 
