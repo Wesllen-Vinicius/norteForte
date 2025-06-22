@@ -21,7 +21,7 @@ interface ChartBarTopProductsProps {
 
 export function ChartBarTopProducts({ data }: ChartBarTopProductsProps) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Top 5 Produtos Mais Vendidos (Últimos 30 dias)</CardTitle>
         <CardDescription>
@@ -30,7 +30,7 @@ export function ChartBarTopProducts({ data }: ChartBarTopProductsProps) {
       </CardHeader>
       <CardContent>
         {data && data.length > 0 ? (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
+          <ChartContainer config={chartConfig} className="aspect-auto h-[180px] w-full">
             <BarChart accessibilityLayer data={data} layout="vertical" margin={{ left: 10 }}>
               <CartesianGrid horizontal={false} />
               <YAxis
@@ -48,7 +48,7 @@ export function ChartBarTopProducts({ data }: ChartBarTopProductsProps) {
             </BarChart>
           </ChartContainer>
         ) : (
-          <div className="flex flex-col items-center justify-center h-[250px] bg-muted/50 rounded-lg">
+          <div className="flex flex-col items-center justify-center h-[180px] bg-muted/50 rounded-lg">
             <IconChartBar size={48} className="text-muted-foreground/50 mb-2"/>
             <p className="text-sm text-muted-foreground">Nenhuma venda registrada no período.</p>
           </div>

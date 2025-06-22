@@ -28,7 +28,7 @@ interface ChartAreaInteractiveProps {
 
 export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Movimentações de Estoque (Últimos 30 dias)</CardTitle>
         <CardDescription>
@@ -39,7 +39,7 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
         {data && data.length > 0 ? (
           <ChartContainer
             config={chartConfig}
-            className="aspect-auto h-[250px] w-full"
+            className="aspect-auto h-[180px] w-full"
           >
             <AreaChart data={data}>
               <defs>
@@ -69,7 +69,7 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
             </AreaChart>
           </ChartContainer>
         ) : (
-          <div className="flex flex-col items-center justify-center h-[250px] bg-muted/50 rounded-lg">
+          <div className="flex flex-col items-center justify-center h-[180px] bg-muted/50 rounded-lg">
             <IconChartArea size={48} className="text-muted-foreground/50 mb-2"/>
             <p className="text-sm text-muted-foreground">Sem dados de movimentação no período.</p>
           </div>
