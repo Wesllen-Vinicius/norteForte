@@ -2,13 +2,13 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { z } from "zod";
 
-// Schema atualizado com os novos campos
+// Schema final para o registro de abate
 export const abateSchema = z.object({
   id: z.string().optional(),
   data: z.date({ required_error: "A data é obrigatória." }),
-  total: z.coerce.number().positive("O total deve ser maior que zero."),
-  condenado: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
-  responsavelId: z.string().min(1, "O responsável é obrigatório."),
+  total: z.coerce.number().positive("O total de animais deve ser maior que zero."),
+  condenado: z.coerce.number().min(0, "A quantidade de condenados não pode ser negativa."),
+  responsavelId: z.string().min(1, "O responsável pelo abate é obrigatório."),
   registradoPor: z.object({
     uid: z.string(),
     nome: z.string(),
@@ -16,11 +16,11 @@ export const abateSchema = z.object({
   createdAt: z.any().optional(),
 });
 
-// Tipo atualizado para incluir nomes para exibição na tabela
-export type Abate = z.infer<typeof abateSchema> & { responsavelNome?: string };
+// Tipo final para o abate, usado na aplicação
+export type Abate = z.infer<typeof abateSchema>;
 
-// Função de adicionar atualizada para receber os dados do usuário que registra
-export const addAbate = async (abate: Omit<Abate, 'id' | 'createdAt' | 'responsavelNome'>) => {
+// Adiciona um novo abate no banco de dados
+export const addAbate = async (abate: Omit<Abate, 'id' | 'createdAt'>) => {
   try {
     const dataWithTimestamp = {
         ...abate,
@@ -33,8 +33,7 @@ export const addAbate = async (abate: Omit<Abate, 'id' | 'createdAt' | 'responsa
   }
 };
 
-// As outras funções (subscribeToAbates, updateAbate, deleteAbate) podem permanecer como estão,
-// mas a 'updateAbate' agora receberá um objeto com a nova estrutura.
+// Listener para atualizações em tempo real
 export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
   const q = collection(db, "abates");
   const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -44,19 +43,22 @@ export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
         abates.push({
             id: doc.id,
             ...data,
-            data: data.data.toDate()
+            data: data.data.toDate() // Converte Timestamp para Date
         } as Abate);
     });
-    callback(abates.sort((a, b) => b.data.getTime() - a.data.getTime()));
+    // Ordena do mais recente para o mais antigo
+    callback(abates.sort((a, b) => (b.data as Date).getTime() - (a.data as Date).getTime()));
   });
   return unsubscribe;
 };
 
-export const updateAbate = async (id: string, abate: Partial<Omit<Abate, 'id' | 'createdAt' | 'responsavelNome'>>) => {
+// Atualiza um registro de abate existente
+export const updateAbate = async (id: string, abate: Partial<Omit<Abate, 'id' | 'createdAt'>>) => {
   const abateDoc = doc(db, "abates", id);
   await updateDoc(abateDoc, abate);
 };
 
+// Deleta um registro de abate
 export const deleteAbate = async (id:string) => {
     const abateDoc = doc(db, "abates", id);
     await deleteDoc(abateDoc);

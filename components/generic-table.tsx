@@ -9,10 +9,11 @@ import {
   getPaginationRowModel,
   getFilteredRowModel,
   useReactTable,
-  ColumnFiltersState,
+  getSortedRowModel,
+  SortingState,
+  GlobalFilterTableState,
 } from "@tanstack/react-table";
 
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -23,46 +24,44 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+// Interface atualizada para receber os dados e os controles do filtro global
 interface GenericTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  filterPlaceholder?: string;
-  filterColumnId?: string;
+  globalFilter: string;
+  setGlobalFilter: (value: string) => void;
+  tableControlsComponent?: React.ReactNode; // Componente para os filtros
 }
 
 export function GenericTable<TData, TValue>({
   columns,
   data,
-  filterPlaceholder = "Filtrar...",
-  filterColumnId,
+  globalFilter,
+  setGlobalFilter,
+  tableControlsComponent,
 }: GenericTableProps<TData, TValue>) {
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>([])
 
   const table = useReactTable({
     data,
     columns,
+    state: {
+      sorting,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
-    state: {
-      columnFilters,
-    },
+    getSortedRowModel: getSortedRowModel(),
   });
 
   return (
     <div className="space-y-4">
-        {/* CORREÇÃO: Renderiza o filtro apenas se a coluna de filtro for especificada */}
-        {filterColumnId && (
-            <Input
-                placeholder={filterPlaceholder}
-                value={(table.getColumn(filterColumnId)?.getFilterValue() as string) ?? ""}
-                onChange={(event) =>
-                    table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
-                }
-                className="max-w-sm"
-            />
-        )}
+      {/* Renderiza os controles de filtro injetados pela página pai */}
+      {tableControlsComponent}
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -84,18 +83,27 @@ export function GenericTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext()
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  Nenhum resultado.
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  Nenhum resultado para os filtros aplicados.
                 </TableCell>
               </TableRow>
             )}
