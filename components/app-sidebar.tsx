@@ -4,7 +4,7 @@ import Link from "next/link";
 import * as React from "react"
 import { usePathname } from "next/navigation";
 import { useNavigationStore } from "@/store/navigation.store";
-import { type Icon, IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog, IconTargetArrow } from "@tabler/icons-react"
+import { IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog, IconTargetArrow, IconBuildingBank } from "@tabler/icons-react"
 import { NavUser } from "@/components/nav-user"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 
@@ -18,6 +18,7 @@ const navLinks = [
   { title: "Estoque", url: "/dashboard/estoque", icon: IconArchive, group: "Operacional" },
   { title: "Contas a Pagar", url: "/dashboard/financeiro/contas-a-pagar", icon: IconReceipt, group: "Financeiro"},
   { title: "Contas a Receber", url: "/dashboard/financeiro/contas-a-receber", icon: IconWallet, group: "Financeiro"},
+  { title: "Contas Bancárias", url: "/dashboard/financeiro/contas-bancarias", icon: IconBuildingBank, group: "Financeiro"},
   { title: "Clientes", url: "/dashboard/clientes", icon: IconUsersGroup, group: "Cadastros" },
   { title: "Fornecedores", url: "/dashboard/fornecedores", icon: IconTruck, group: "Cadastros" },
   { title: "Prestadores", url: "/dashboard/funcionarios", icon: IconUsers, group: "Cadastros" },
@@ -71,19 +72,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         };
 
                         return (
-    <SidebarMenuItem key={item.title}>
-        <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-            <Link
-                href={item.url}
-                onClick={handleClick}
-                aria-current={isActive ? "page" : undefined}
-            >
-                {item.icon && <item.icon />}
-                <span>{item.title}</span>
-            </Link>
-        </SidebarMenuButton>
-    </SidebarMenuItem>
-)
+                          <SidebarMenuItem key={item.title}>
+                              <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
+                                  <Link
+                                      href={item.url}
+                                      onClick={handleClick}
+                                      aria-current={isActive ? "page" : undefined}
+                                  >
+                                      {item.icon && <item.icon />}
+                                      <span>{item.title}</span>
+                                  </Link>
+                              </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        )
                     })}
                 </SidebarMenu>
             </SidebarGroup>

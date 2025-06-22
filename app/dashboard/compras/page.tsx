@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import { CenteredLayout } from "@/components/centered-layout";
 import { GenericForm } from "@/components/generic-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
@@ -28,12 +28,12 @@ const defaultFormValues: CompraFormValues = {
     data: new Date(),
     itens: [],
     condicaoPagamento: "",
+    contaBancariaId: "",
     valorTotal: 0
 };
 
 export default function ComprasPage() {
-    const produtos = useDataStore((state) => state.produtos);
-    const fornecedores = useDataStore((state) => state.fornecedores);
+    const { produtos, fornecedores, contasBancarias } = useDataStore();
 
     const form = useForm<CompraFormValues>({
         resolver: zodResolver(compraSchema),
@@ -47,6 +47,10 @@ export default function ComprasPage() {
 
     const watchedItens = useWatch({ control: form.control, name: 'itens' });
     const watchedTotal = form.watch('valorTotal');
+
+    const contasBancariasOptions = useMemo(() =>
+        contasBancarias.map(c => ({ label: `${c.nomeConta} (${c.banco})`, value: c.id! })),
+    [contasBancarias]);
 
     useEffect(() => {
         const total = watchedItens.reduce((acc, item) => acc + (item.quantidade * item.custoUnitario || 0), 0);
@@ -123,6 +127,27 @@ export default function ComprasPage() {
                             </div>
 
                             <Separator className="my-6" />
+
+                             <FormField name="contaBancariaId" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Conta de Origem (Débito)</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            {contasBancariasOptions.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+
+                            <FormItem>
+                                <FormLabel>Anexo (Comprovante/NF)</FormLabel>
+                                <FormControl><Input type="file" /></FormControl>
+                                <FormDescription>O upload de arquivos será implementado futuramente.</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+
 
                              <div className="grid md:grid-cols-2 gap-4 items-end">
                                 <FormField name="condicaoPagamento" control={form.control} render={({ field }) => (
