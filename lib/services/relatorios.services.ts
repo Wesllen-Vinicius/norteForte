@@ -2,34 +2,45 @@
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, Timestamp } from "firebase/firestore";
 import { Movimentacao } from "./estoque.services";
+import { Venda } from "./vendas.services";
+import { Producao } from "./producao.services";
 
-// Busca movimentações de estoque por período
-export const getMovimentacoesPorPeriodo = async (dataInicio: Date, dataFim: Date): Promise<Movimentacao[]> => {
-    const movimentacoesRef = collection(db, "movimentacoesEstoque");
-
-    // Converte as datas para Timestamps do Firestore
+const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, dataFim: Date): Promise<T[]> => {
+    const collectionRef = collection(db, collectionName);
     const inicioTimestamp = Timestamp.fromDate(dataInicio);
-    const fimTimestamp = Timestamp.fromDate(new Date(dataFim.setHours(23, 59, 59, 999))); // Garante que o fim do dia seja incluído
+    const fimTimestamp = Timestamp.fromDate(new Date(dataFim.setHours(23, 59, 59, 999)));
 
     const q = query(
-        movimentacoesRef,
+        collectionRef,
         where("data", ">=", inicioTimestamp),
         where("data", "<=", fimTimestamp),
         orderBy("data", "desc")
     );
 
     const querySnapshot = await getDocs(q);
-    const movimentacoes: Movimentacao[] = [];
+    const data: T[] = [];
 
     querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Converte o Timestamp do Firebase para um objeto Date do JS para facilitar a formatação na UI
-        const movimentacao = {
-          ...data,
-          data: (data.data as Timestamp).toDate(),
-        } as unknown as Movimentacao;
-        movimentacoes.push(movimentacao);
+        const docData = doc.data();
+        const typedData = {
+          ...docData,
+          id: doc.id,
+          data: (docData.data as Timestamp).toDate(),
+        } as T;
+        data.push(typedData);
     });
 
-    return movimentacoes;
+    return data;
+}
+
+export const getMovimentacoesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Movimentacao>("movimentacoesEstoque", dataInicio, dataFim);
+}
+
+export const getVendasPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Venda>("vendas", dataInicio, dataFim);
+}
+
+export const getProducoesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Producao>("producoes", dataInicio, dataFim);
 }

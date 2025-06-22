@@ -17,7 +17,7 @@ interface ChartVendasCondicaoProps {
 
 export function ChartVendasCondicao({ data }: ChartVendasCondicaoProps) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Vendas por Condição (Mês Atual)</CardTitle>
         <CardDescription>
@@ -26,7 +26,7 @@ export function ChartVendasCondicao({ data }: ChartVendasCondicaoProps) {
       </CardHeader>
       <CardContent>
         {data && data.reduce((acc, item) => acc + item.value, 0) > 0 ? (
-          <ChartContainer config={chartConfig} className="aspect-square h-[250px] w-full">
+          <ChartContainer config={chartConfig} className="aspect-square h-[180px] w-full">
             <PieChart>
               <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
               <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} strokeWidth={5}>
@@ -38,7 +38,7 @@ export function ChartVendasCondicao({ data }: ChartVendasCondicaoProps) {
             </PieChart>
           </ChartContainer>
         ) : (
-            <div className="flex flex-col items-center justify-center h-[250px] bg-muted/50 rounded-lg">
+            <div className="flex flex-col items-center justify-center h-[180px] bg-muted/50 rounded-lg">
                 <IconChartPie size={48} className="text-muted-foreground/50 mb-2"/>
                 <p className="text-sm text-muted-foreground">Nenhuma venda registrada no período.</p>
             </div>

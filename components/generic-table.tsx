@@ -1,4 +1,3 @@
-// components/generic-table.tsx
 "use client";
 
 import * as React from "react";
@@ -9,10 +8,13 @@ import {
   getPaginationRowModel,
   getFilteredRowModel,
   useReactTable,
-  ColumnFiltersState,
+  getSortedRowModel,
+  SortingState,
+  ExpandedState,
+  getExpandedRowModel,
+  Row,
 } from "@tanstack/react-table";
 
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -26,43 +28,59 @@ import {
 interface GenericTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  filterPlaceholder?: string;
-  filterColumnId?: string;
+  globalFilter: string;
+  setGlobalFilter: (value: string) => void;
+  tableControlsComponent?: React.ReactNode;
+  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
+  enableMultiRowExpansion?: boolean;
 }
 
 export function GenericTable<TData, TValue>({
   columns,
   data,
-  filterPlaceholder = "Filtrar...",
-  filterColumnId,
+  globalFilter,
+  setGlobalFilter,
+  tableControlsComponent,
+  renderSubComponent,
 }: GenericTableProps<TData, TValue>) {
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
   const table = useReactTable({
     data,
     columns,
+    state: {
+      sorting,
+      globalFilter,
+      expanded,
+    },
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
-    state: {
-      columnFilters,
+    getSortedRowModel: getSortedRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
+    onExpandedChange: (updater) => {
+        setExpanded((prev: Record<string, boolean>) => {
+            const newExpanded = typeof updater === 'function' ? updater(prev) : updater;
+
+            if (Object.keys(newExpanded).length > 1) {
+                const newKey = Object.keys(newExpanded).find(k => !(k in prev));
+                return newKey ? { [newKey]: true } : newExpanded;
+            }
+
+            return newExpanded;
+        });
     },
   });
 
   return (
     <div className="space-y-4">
-        {/* CORREÇÃO: Renderiza o filtro apenas se a coluna de filtro for especificada */}
-        {filterColumnId && (
-            <Input
-                placeholder={filterPlaceholder}
-                value={(table.getColumn(filterColumnId)?.getFilterValue() as string) ?? ""}
-                onChange={(event) =>
-                    table.getColumn(filterColumnId)?.setFilterValue(event.target.value)
-                }
-                className="max-w-sm"
-            />
-        )}
+      <div className="flex items-center">
+        {tableControlsComponent}
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -84,18 +102,33 @@ export function GenericTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <React.Fragment key={row.id}>
+                    <TableRow data-state={row.getIsSelected() && "selected"}>
+                        {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                            {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                            )}
+                        </TableCell>
+                        ))}
+                    </TableRow>
+                    {row.getIsExpanded() && renderSubComponent && (
+                        <TableRow>
+                            <TableCell colSpan={row.getVisibleCells().length} className="p-0">
+                                {renderSubComponent({ row })}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </React.Fragment>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  Nenhum resultado.
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
+                  Nenhum resultado para os filtros aplicados.
                 </TableCell>
               </TableRow>
             )}

@@ -71,15 +71,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         };
 
                         return (
-                            <SidebarMenuItem key={item.title}>
-                            <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-                                <Link href={item.url} onClick={handleClick}>
-                                    {item.icon && <item.icon />}
-                                    <span>{item.title}</span>
-                                </Link>
-                            </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        )
+    <SidebarMenuItem key={item.title}>
+        <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
+            <Link
+                href={item.url}
+                onClick={handleClick}
+                aria-current={isActive ? "page" : undefined}
+            >
+                {item.icon && <item.icon />}
+                <span>{item.title}</span>
+            </Link>
+        </SidebarMenuButton>
+    </SidebarMenuItem>
+)
                     })}
                 </SidebarMenu>
             </SidebarGroup>

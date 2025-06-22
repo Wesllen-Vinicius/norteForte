@@ -61,7 +61,7 @@ export default function Page() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-6 py-6">
+    <div className="flex flex-col gap-4 py-6">
       {isLoading || !stats ? (
         <div className="grid grid-cols-1 gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 lg:px-6">
           {[...Array(7)].map((_, i) => <Skeleton key={i} className="h-32" />)}
@@ -70,19 +70,19 @@ export default function Page() {
         <SectionCards stats={stats} />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 px-4 lg:px-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 px-4 lg:px-6">
         <div className="xl:col-span-2">
-            {isLoading ? <Skeleton className="h-[340px]" /> : <ChartAreaInteractive data={movimentacoesData} />}
+            {isLoading ? <Skeleton className="h-[260px]" /> : <ChartAreaInteractive data={movimentacoesData} />}
         </div>
         <div>
-            {isLoading ? <Skeleton className="h-[340px]" /> : <ChartBarTopProducts data={topProductsData} />}
+            {isLoading ? <Skeleton className="h-[260px]" /> : <ChartBarTopProducts data={topProductsData} />}
         </div>
         <div>
-            {isLoading ? <Skeleton className="h-[340px]" /> : <ChartVendasCondicao data={vendasCondicaoData} />}
+            {isLoading ? <Skeleton className="h-[260px]" /> : <ChartVendasCondicao data={vendasCondicaoData} />}
         </div>
       </div>
       <div className="grid grid-cols-1 px-4 lg:px-6">
-        {isLoading || !rendimentoData ? <Skeleton className="h-[340px]" /> : <ChartRendimentoProducao data={rendimentoData} />}
+        {isLoading || !rendimentoData ? <Skeleton className="h-[180px]" /> : <ChartRendimentoProducao data={rendimentoData} />}
       </div>
     </div>
   )
