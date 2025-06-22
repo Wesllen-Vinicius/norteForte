@@ -1,74 +1,102 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, doc, runTransaction, serverTimestamp, Timestamp, onSnapshot, QuerySnapshot, DocumentData, updateDoc, query, orderBy, addDoc } from "firebase/firestore";
+import { Venda } from "@/lib/schemas";
 
-const itemVendidoSchema = z.object({
-  produtoId: z.string().min(1, "Selecione um produto."),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
-  precoUnitario: z.coerce.number().positive("O preço deve ser positivo."),
-  custoUnitario: z.coerce.number().min(0),
-});
-
-export const vendaSchema = z.object({
-  id: z.string().optional(),
-  clienteId: z.string().min(1, "Selecione um cliente."),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  produtos: z.array(itemVendidoSchema).min(1, "Adicione pelo menos um produto à venda."),
-  valorTotal: z.coerce.number().positive("O valor total deve ser positivo."),
-  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
-  dataVencimento: z.date().optional(),
-  createdAt: z.any().optional(),
-}).refine(data => {
-    if (data.condicaoPagamento === "A_PRAZO") return !!data.dataVencimento;
-    return true;
-}, {
-    message: "A data de vencimento é obrigatória para vendas a prazo.",
-    path: ["dataVencimento"],
-});
-
-export type Venda = z.infer<typeof vendaSchema>;
-
-export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt'>, clienteNome: string) => {
+export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' | 'status'>, clienteNome: string) => {
   try {
     await runTransaction(db, async (transaction) => {
-      const vendaDocRef = doc(collection(db, "vendas"));
+
+      const produtoRefs = vendaData.produtos.map(item => doc(db, "produtos", item.produtoId));
+      const produtoDocs = await Promise.all(produtoRefs.map(ref => transaction.get(ref)));
 
       const produtosParaSalvar = [];
 
-      for (const item of vendaData.produtos) {
-        const produtoDocRef = doc(db, "produtos", item.produtoId);
-        const produtoDoc = await transaction.get(produtoDocRef);
+      for (let i = 0; i < produtoDocs.length; i++) {
+        const produtoDoc = produtoDocs[i];
+        const item = vendaData.produtos[i];
 
-        if (!produtoDoc.exists()) throw new Error(`Produto "${item.produtoNome}" não encontrado.`);
+        if (!produtoDoc.exists()) {
+          throw new Error(`Produto "${item.produtoNome}" não encontrado.`);
+        }
 
         const dadosProduto = produtoDoc.data();
         const estoqueAtual = dadosProduto.quantidade || 0;
-        if (estoqueAtual < item.quantidade) throw new Error(`Estoque de "${item.produtoNome}" insuficiente.`);
-
-        const novoEstoque = estoqueAtual - item.quantidade;
-        transaction.update(produtoDocRef, { quantidade: novoEstoque });
-
-        const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
-        transaction.set(movimentacaoDocRef, { /* ... */ });
-
-        // Adiciona o custo do produto ao item da venda para o registro histórico
-        produtosParaSalvar.push({ ...item, custoUnitario: dadosProduto.custoUnitario || 0 });
+        if (estoqueAtual < item.quantidade) {
+          throw new Error(`Estoque de "${item.produtoNome}" (${estoqueAtual}) insuficiente para a venda de ${item.quantidade}.`);
+        }
+         produtosParaSalvar.push({ ...item, custoUnitario: dadosProduto.custoUnitario || 0 });
       }
+
+
+      const vendaDocRef = doc(collection(db, "vendas"));
+      const statusVenda = vendaData.condicaoPagamento === 'A_VISTA' ? 'Paga' : 'Pendente';
 
       const dadosVendaFinal = {
         ...vendaData,
         produtos: produtosParaSalvar,
+        status: statusVenda,
         createdAt: serverTimestamp(),
         data: Timestamp.fromDate(vendaData.data),
         dataVencimento: vendaData.dataVencimento ? Timestamp.fromDate(vendaData.dataVencimento) : null,
       };
       transaction.set(vendaDocRef, dadosVendaFinal);
 
-      if (vendaData.condicaoPagamento === 'A_PRAZO') { /* ... lógica de contas a receber ... */ }
+
+      for (let i = 0; i < produtoDocs.length; i++) {
+        const produtoRef = produtoRefs[i];
+        const produtoData = produtoDocs[i].data();
+        const item = vendaData.produtos[i];
+
+        const novoEstoque = (produtoData?.quantidade || 0) - item.quantidade;
+        transaction.update(produtoRef, { quantidade: novoEstoque });
+
+        const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
+        transaction.set(movimentacaoDocRef, {
+            produtoId: item.produtoId,
+            produtoNome: item.produtoNome,
+            quantidade: item.quantidade,
+            tipo: 'saida',
+            motivo: `Venda para ${clienteNome} (ID: ${vendaDocRef.id.slice(0, 5)})`,
+            data: serverTimestamp(),
+        });
+      }
+
+      if (vendaData.condicaoPagamento === 'A_PRAZO' && vendaData.dataVencimento) {
+        const contaReceberRef = doc(collection(db, "contasAReceber"));
+        transaction.set(contaReceberRef, {
+            vendaId: vendaDocRef.id,
+            clienteId: vendaData.clienteId,
+            valor: vendaData.valorTotal,
+            dataEmissao: Timestamp.fromDate(vendaData.data),
+            dataVencimento: Timestamp.fromDate(vendaData.dataVencimento),
+            status: 'Pendente',
+        });
+      }
     });
   } catch (error) {
     console.error("Erro ao registrar venda: ", error);
     throw error;
   }
+};
+
+export const subscribeToVendas = (callback: (vendas: Venda[]) => void) => {
+  const q = query(collection(db, "vendas"), orderBy("data", "desc"));
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const vendas: Venda[] = [];
+    querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        vendas.push({
+            ...data,
+            id: doc.id,
+            data: data.data.toDate(),
+            dataVencimento: data.dataVencimento?.toDate(),
+        } as Venda);
+    });
+    callback(vendas);
+  });
+};
+
+export const updateVendaStatus = async (id: string, status: 'Paga' | 'Pendente') => {
+  const vendaDoc = doc(db, "vendas", id);
+  await updateDoc(vendaDoc, { status });
 };

@@ -12,12 +12,18 @@ import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ContaAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
+import { Input } from "@/components/ui/input"; // Adicionado Input
+import { ContaAReceber } from "@/lib/schemas";
+import { updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
 import { useDataStore } from "@/store/data.store";
+import { updateVendaStatus } from "@/lib/services/vendas.services";
+
+type ContaComNome = ContaAReceber & { clienteNome?: string };
 
 export default function ContasAReceberPage() {
     const [contas, setContas] = useState<ContaAReceber[]>([]);
     const clientes = useDataStore((state) => state.clientes);
+    const [globalFilter, setGlobalFilter] = useState('');
 
     useEffect(() => {
         const unsubContas = onSnapshot(collection(db, "contasAReceber"), (snapshot) => {
@@ -30,9 +36,12 @@ export default function ContasAReceberPage() {
         };
     }, []);
 
-    const handleMarcarComoRecebida = async (id: string) => {
+    const handleMarcarComoRecebida = async (conta: ContaAReceber) => {
         try {
-            await updateStatusContaAReceber(id, "Recebida");
+            await updateStatusContaAReceber(conta.id, "Recebida");
+            if (conta.vendaId) {
+                await updateVendaStatus(conta.vendaId, "Paga");
+            }
             toast.success("Conta marcada como recebida!");
         } catch (error) {
             toast.error("Erro ao atualizar o status da conta.");
@@ -46,12 +55,12 @@ export default function ContasAReceberPage() {
         }));
     }, [contas, clientes]);
 
-    const columns: ColumnDef<typeof contasComCliente[0]>[] = [
+    const columns: ColumnDef<ContaComNome>[] = [
         { header: "Cliente", accessorKey: "clienteNome" },
-        { header: "Emissão", cell: ({ row }) => format((row.original.dataEmissao as Timestamp).toDate(), 'dd/MM/yyyy') },
-        { header: "Vencimento", cell: ({ row }) => format((row.original.dataVencimento as Timestamp).toDate(), 'dd/MM/yyyy') },
-        { header: "Valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}`},
-        { header: "Status", cell: ({ row }) => (
+        { header: "Emissão", accessorKey: "dataEmissao", cell: ({ row }) => format((row.original.dataEmissao as Timestamp).toDate(), 'dd/MM/yyyy') },
+        { header: "Vencimento", accessorKey: "dataVencimento", cell: ({ row }) => row.original.dataVencimento ? format((row.original.dataVencimento as Timestamp).toDate(), 'dd/MM/yyyy') : 'N/A' },
+        { header: "Valor", accessorKey: "valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}`},
+        { header: "Status", accessorKey: "status", cell: ({ row }) => (
             <Badge variant={row.original.status === 'Pendente' ? 'destructive' : 'default'}>
                 {row.original.status}
             </Badge>
@@ -59,11 +68,13 @@ export default function ContasAReceberPage() {
         { id: "actions", cell: ({ row }) => (
             <div className="text-right">
                 {row.original.status === 'Pendente' && (
-                    <Button size="sm" onClick={() => handleMarcarComoRecebida(row.original.id)}>Marcar como Recebida</Button>
+                    <Button size="sm" onClick={() => handleMarcarComoRecebida(row.original)}>Marcar como Recebida</Button>
                 )}
             </div>
         )}
     ];
+
+    const tableControls = (<Input placeholder="Pesquisar por cliente..." value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="max-w-full md:max-w-sm" />);
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
@@ -76,8 +87,9 @@ export default function ContasAReceberPage() {
                     <GenericTable
                         columns={columns}
                         data={contasComCliente}
-                        filterPlaceholder="Filtrar por cliente..."
-                        filterColumnId="clienteNome"
+                        globalFilter={globalFilter}
+                        setGlobalFilter={setGlobalFilter}
+                        tableControlsComponent={tableControls}
                     />
                 </CardContent>
             </Card>
