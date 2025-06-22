@@ -72,6 +72,19 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
             status: 'Pendente',
         });
       }
+
+      // Atualiza o saldo da conta bancária se a venda for paga
+      if (vendaData.contaBancariaId && statusVenda === 'Paga') {
+        const contaRef = doc(db, "contasBancarias", vendaData.contaBancariaId);
+        const contaDoc = await transaction.get(contaRef);
+        if (!contaDoc.exists()) {
+          throw new Error("Conta bancária de destino não encontrada.");
+        }
+        const valorFinal = vendaData.valorFinal ?? vendaData.valorTotal;
+        const novoSaldo = (contaDoc.data().saldoAtual || 0) + valorFinal;
+        transaction.update(contaRef, { saldoAtual: novoSaldo });
+      }
+
     });
   } catch (error) {
     console.error("Erro ao registrar venda: ", error);
@@ -100,3 +113,20 @@ export const updateVendaStatus = async (id: string, status: 'Paga' | 'Pendente')
   const vendaDoc = doc(db, "vendas", id);
   await updateDoc(vendaDoc, { status });
 };
+
+export const updateVenda = async (id: string, vendaData: Partial<Omit<Venda, 'id'>>) => {
+    const vendaDocRef = doc(db, "vendas", id);
+
+    const dataToUpdate: { [key: string]: any } = { ...vendaData };
+
+    if (vendaData.data) {
+        dataToUpdate.data = Timestamp.fromDate(vendaData.data as Date);
+    }
+    if (vendaData.dataVencimento) {
+        dataToUpdate.dataVencimento = Timestamp.fromDate(vendaData.dataVencimento as Date);
+    } else if (vendaData.hasOwnProperty('dataVencimento')) {
+        dataToUpdate.dataVencimento = null;
+    }
+
+    await updateDoc(vendaDocRef, dataToUpdate);
+}

@@ -10,8 +10,10 @@ import { Abate, subscribeToAbates } from '@/lib/services/abates.services';
 import { Meta, subscribeToMetas } from '@/lib/services/metas.services';
 import { SystemUser, subscribeToUsers } from '@/lib/services/user.services';
 import { Producao, subscribeToProducoes } from '@/lib/services/producao.services';
-import { Venda } from '@/lib/schemas'; // CORREÇÃO: Importando tipo de lib/schemas
+import { Venda, ContaBancaria } from '@/lib/schemas';
 import { subscribeToVendas } from '@/lib/services/vendas.services';
+import { subscribeToContasBancarias } from '@/lib/services/contasBancarias.services';
+
 
 interface DataState {
   clientes: Cliente[];
@@ -26,6 +28,7 @@ interface DataState {
   vendas: Venda[];
   metas: Meta[];
   users: SystemUser[];
+  contasBancarias: ContaBancaria[];
   isInitialized: boolean;
   initializeSubscribers: () => void;
 }
@@ -43,6 +46,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   vendas: [],
   metas: [],
   users: [],
+  contasBancarias: [],
   isInitialized: false,
 
   initializeSubscribers: () => {
@@ -62,6 +66,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     subscribeToVendas((data) => set({ vendas: data }));
     subscribeToMetas((data) => set({ metas: data }));
     subscribeToUsers((data) => set({ users: data }));
+    subscribeToContasBancarias((data) => set({ contasBancarias: data }));
 
     set({ isInitialized: true });
   },
