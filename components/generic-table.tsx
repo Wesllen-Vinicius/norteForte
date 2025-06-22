@@ -10,6 +10,9 @@ import {
   useReactTable,
   getSortedRowModel,
   SortingState,
+  ExpandedState,
+  getExpandedRowModel,
+  Row,
 } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
@@ -22,13 +25,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Interface Aprimorada
 interface GenericTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   globalFilter: string;
   setGlobalFilter: (value: string) => void;
   tableControlsComponent?: React.ReactNode;
+  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
+  enableMultiRowExpansion?: boolean;
 }
 
 export function GenericTable<TData, TValue>({
@@ -37,8 +41,10 @@ export function GenericTable<TData, TValue>({
   globalFilter,
   setGlobalFilter,
   tableControlsComponent,
+  renderSubComponent,
 }: GenericTableProps<TData, TValue>) {
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
   const table = useReactTable({
     data,
@@ -46,18 +52,31 @@ export function GenericTable<TData, TValue>({
     state: {
       sorting,
       globalFilter,
+      expanded,
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(), // Habilita o filtro global
+    getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
+    onExpandedChange: (updater) => {
+        setExpanded((prev: Record<string, boolean>) => {
+            const newExpanded = typeof updater === 'function' ? updater(prev) : updater;
+
+            if (Object.keys(newExpanded).length > 1) {
+                const newKey = Object.keys(newExpanded).find(k => !(k in prev));
+                return newKey ? { [newKey]: true } : newExpanded;
+            }
+
+            return newExpanded;
+        });
+    },
   });
 
   return (
     <div className="space-y-4">
-      {/* Renderiza os controles de filtro injetados pela página pai */}
       <div className="flex items-center">
         {tableControlsComponent}
       </div>
@@ -83,19 +102,25 @@ export function GenericTable<TData, TValue>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <React.Fragment key={row.id}>
+                    <TableRow data-state={row.getIsSelected() && "selected"}>
+                        {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                            {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                            )}
+                        </TableCell>
+                        ))}
+                    </TableRow>
+                    {row.getIsExpanded() && renderSubComponent && (
+                        <TableRow>
+                            <TableCell colSpan={row.getVisibleCells().length} className="p-0">
+                                {renderSubComponent({ row })}
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </React.Fragment>
               ))
             ) : (
               <TableRow>

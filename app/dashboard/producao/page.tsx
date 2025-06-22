@@ -6,9 +6,9 @@ import { useForm, useFieldArray, useWatch, Control, UseFormSetValue } from "reac
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { IconPlus, IconTrash, IconPencil, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconPencil, IconAlertTriangle, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { format } from 'date-fns';
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
 import { Timestamp } from "firebase/firestore";
 import { CrudLayout } from "@/components/crud-layout";
@@ -134,7 +134,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
 }
 
 export default function ProducaoPage() {
-    const { producoes, funcionarios, abates, users, produtos, metas } = useDataStore();
+    const { producoes, funcionarios, abates, users, produtos, metas, unidades } = useDataStore();
     const { user, role } = useAuthStore();
 
     const [isEditing, setIsEditing] = useState(false);
@@ -243,7 +243,47 @@ export default function ProducaoPage() {
         }
     };
 
+    const renderSubComponent = ({ row }: { row: Row<ProducaoComDetalhes> }) => {
+        const { produtos: todosOsProdutos, unidades } = useDataStore.getState();
+
+        return (
+            <div className="p-4 bg-muted/50 animate-in fade-in-0 zoom-in-95">
+                <h4 className="font-semibold text-sm mb-2">Detalhes dos Produtos Gerados</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {row.original.produtos.map((p, i) => {
+                        const produtoInfo = todosOsProdutos.find(prod => prod.id === p.produtoId);
+                        const unidadeNome = produtoInfo?.tipoProduto === 'VENDA'
+                            ? unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un'
+                            : 'un';
+
+                        return (
+                            <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
+                                <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
+                                <p><strong>Produzido:</strong> {p.quantidade.toFixed(2)} {unidadeNome}</p>
+                                <p className="text-destructive/80"><strong>Perda:</strong> {p.perda.toFixed(2)} {unidadeNome}</p>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
     const columns: ColumnDef<ProducaoComDetalhes>[] = [
+        {
+          id: 'expander',
+          header: () => null,
+          cell: ({ row }) => (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => row.toggleExpanded()}
+              className="h-8 w-8"
+            >
+              {row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}
+            </Button>
+          ),
+        },
         { header: "Data", cell: ({ row }) => format(row.original.data as Date, 'dd/MM/yyyy') },
         { accessorKey: "lote", header: "Lote" },
         { accessorKey: "responsavelNome", header: "Responsável" },
@@ -337,7 +377,7 @@ export default function ProducaoPage() {
                 tableContent={
                     isLoading ?
                         <div className="space-y-2"><div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                        : <GenericTable columns={columns} data={filteredAndEnrichedProducoes} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} />
+                        : <GenericTable columns={columns} data={filteredAndEnrichedProducoes} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} renderSubComponent={renderSubComponent} />
                 }
             />
         </div>
