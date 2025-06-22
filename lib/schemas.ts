@@ -1,28 +1,26 @@
 import { z } from "zod";
 
 // =================================================================
-// Schemas de Itens (Reutilizados em Vendas, Produção, etc.)
-// =================================================================
-
-export const itemVendidoSchema = z.object({
-  produtoId: z.string().min(1, "Selecione um produto."),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
-  precoUnitario: z.coerce.number().positive("O preço deve ser positivo."),
-  custoUnitario: z.coerce.number().min(0),
-});
-
-// =================================================================
-// Schema Base para evitar problemas com .omit em schemas com .refine
+// Schema Base para Venda (para uso interno e para evitar erro do .omit)
 // =================================================================
 
 const vendaBaseSchema = z.object({
   id: z.string().optional(),
   clienteId: z.string().min(1, "Selecione um cliente."),
   data: z.date({ required_error: "A data é obrigatória." }),
-  produtos: z.array(itemVendidoSchema).min(1, "Adicione pelo menos um produto à venda."),
+  produtos: z.array(z.object({
+    produtoId: z.string().min(1, "Selecione um produto."),
+    produtoNome: z.string(),
+    quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
+    precoUnitario: z.coerce.number().positive("O preço deve ser positivo."),
+    custoUnitario: z.coerce.number().min(0),
+  })).min(1, "Adicione pelo menos um produto à venda."),
   valorTotal: z.coerce.number().min(0, "O valor total não pode ser negativo."),
   condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
+  metodoPagamento: z.string().optional(),
+  numeroParcelas: z.coerce.number().optional(),
+  taxaCartao: z.coerce.number().optional(),
+  valorFinal: z.number().optional(),
   dataVencimento: z.date().optional(),
   status: z.enum(['Paga', 'Pendente']).default('Pendente'),
   registradoPor: z.object({
@@ -33,7 +31,19 @@ const vendaBaseSchema = z.object({
 });
 
 // =================================================================
-// Schemas Finais com Refinamentos
+// Schema para o Formulário (criado a partir do schema base ANTES do .refine)
+// =================================================================
+
+export const formVendaSchema = vendaBaseSchema.omit({
+    id: true,
+    registradoPor: true,
+    status: true,
+    createdAt: true,
+    valorFinal: true, // valorFinal é sempre calculado dinamicamente
+});
+
+// =================================================================
+// Schema Final com Validação (para salvar no banco)
 // =================================================================
 
 export const vendaSchema = vendaBaseSchema.refine(data => {
@@ -42,31 +52,19 @@ export const vendaSchema = vendaBaseSchema.refine(data => {
 }, {
     message: "A data de vencimento é obrigatória para vendas a prazo.",
     path: ["dataVencimento"],
-});
-
-export const formVendaSchema = vendaBaseSchema.omit({
-    id: true,
-    registradoPor: true,
-    status: true,
-    createdAt: true
-});
-
-export const contaAReceberSchema = z.object({
-  id: z.string(),
-  vendaId: z.string(),
-  clienteId: z.string(),
-  valor: z.number(),
-  dataEmissao: z.any(),
-  dataVencimento: z.any().optional(),
-  status: z.enum(['Pendente', 'Recebida']),
+}).refine(data => {
+    if (data.condicaoPagamento === "A_VISTA") return !!data.metodoPagamento && data.metodoPagamento.length > 0;
+    return true;
+}, {
+    message: "O método de pagamento é obrigatório para vendas à vista.",
+    path: ["metodoPagamento"],
 });
 
 
 // =================================================================
-// Tipos Inferidos dos Schemas
+// Tipos Inferidos
 // =================================================================
 
 export type Venda = z.infer<typeof vendaSchema>;
-export type ContaAReceber = z.infer<typeof contaAReceberSchema>;
-export type ItemVendido = z.infer<typeof itemVendidoSchema>;
-export type VendaFormValues = z.infer<typeof formSchema>;
+export type ItemVendido = z.infer<typeof vendaBaseSchema.shape.produtos.element>;
+export type VendaFormValues = z.infer<typeof formVendaSchema>;
