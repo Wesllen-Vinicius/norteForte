@@ -8,9 +8,8 @@ import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
-import { Timestamp } from "firebase/firestore";
+import { Timestamp, Unsubscribe } from "firebase/firestore";
 import { DateRange } from "react-day-picker";
-
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -21,21 +20,24 @@ import { DatePicker } from "@/components/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { Combobox } from "@/components/ui/combobox";
-import { Abate, abateSchema, addAbate, updateAbate, deleteAbate } from "@/lib/services/abates.services";
+import { Abate, abateSchema, addAbate, updateAbate, deleteAbate, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Badge } from "@/components/ui/badge";
 
-const formSchema = abateSchema.omit({ registradoPor: true });
+// Schema para o formulário, omitindo campos gerenciados automaticamente.
+const formSchema = abateSchema.omit({ registradoPor: true, createdAt: true, id: true });
 type AbateFormValues = z.infer<typeof formSchema>;
 type AbateComDetalhes = Abate & { responsavelNome?: string, registradorRole?: string };
 
 export default function AbatesPage() {
-    const { abates, funcionarios, users } = useDataStore();
+    const { funcionarios, users } = useDataStore();
     const { user, role } = useAuthStore();
 
+    const [abates, setAbates] = useState<Abate[]>([]);
     const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null); // Estado para guardar o ID durante a edição
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -48,43 +50,31 @@ export default function AbatesPage() {
     });
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1500);
-        return () => clearTimeout(timer);
-    }, []);
+        setIsLoading(true);
+        const unsubscribe: Unsubscribe = subscribeToAbatesByDateRange(dateRange, (data) => {
+            setAbates(data);
+            const timer = setTimeout(() => setIsLoading(false), 500);
+            return () => clearTimeout(timer);
+        });
+        return () => unsubscribe();
+    }, [dateRange]);
 
     const funcionarioOptions = useMemo(() =>
         funcionarios.map(f => ({ label: f.nomeCompleto, value: f.id! })),
     [funcionarios]);
 
-    const filteredAndEnrichedAbates = useMemo(() => {
-        let filteredData = abates;
-
-        if (dateRange?.from) {
-            const fromDate = dateRange.from;
-            const toDate = dateRange.to || dateRange.from;
-
-            const startOfDay = new Date(fromDate);
-            startOfDay.setHours(0, 0, 0, 0);
-
-            const endOfDay = new Date(toDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
-            filteredData = filteredData.filter(abate => {
-                const abateDate = abate.data as Date;
-                return abateDate >= startOfDay && abateDate <= endOfDay;
-            });
-        }
-
-        return filteredData.map(abate => {
+    const abatesEnriquecidos = useMemo(() => {
+        return abates.map(abate => {
             const responsavel = funcionarios.find(f => f.id === abate.responsavelId)?.nomeCompleto || 'N/A';
-            const registrador = users.find(u => u.uid === abate.registradoPor.uid);
+            const registradorRole = abate.registradoPor.role || users.find(u => u.uid === abate.registradoPor.uid)?.role || 'N/A';
+
             return {
                 ...abate,
                 responsavelNome: responsavel,
-                registradorRole: registrador?.role || 'N/A',
+                registradorRole,
             };
         });
-    }, [abates, funcionarios, users, dateRange]);
+    }, [abates, funcionarios, users]);
 
     const columns: ColumnDef<AbateComDetalhes>[] = [
         { accessorKey: "data", header: "Data", cell: ({ row }) => format(row.original.data as Date, "dd/MM/yyyy") },
@@ -94,7 +84,7 @@ export default function AbatesPage() {
         { header: "Registrado Por", accessorKey: "registradoPor.nome" },
         { header: "Cargo do Registrador", accessorKey: "registradorRole", cell: ({ row }) => (
             <Badge variant={row.original.registradorRole === 'ADMINISTRADOR' ? 'default' : 'secondary'}>
-                {row.original.registradorRole}
+                {row.original.registradorRole || 'N/A'}
             </Badge>
           )
         },
@@ -118,15 +108,16 @@ export default function AbatesPage() {
         },
     ];
 
+    // CORREÇÃO: A função agora armazena o ID no estado e reseta o formulário sem o campo 'id'.
     const handleEdit = (abate: AbateComDetalhes) => {
+      setEditingId(abate.id!);
+      setIsEditing(true);
       form.reset({
-          id: abate.id,
           data: abate.data,
           total: abate.total,
           condenado: abate.condenado,
           responsavelId: abate.responsavelId,
       });
-      setIsEditing(true);
     };
 
     const handleDeleteClick = (id: string) => {
@@ -155,15 +146,16 @@ export default function AbatesPage() {
             responsavelId: "",
         });
         setIsEditing(false);
+        setEditingId(null);
     };
 
+    // CORREÇÃO: A lógica de submit agora usa o `editingId` do estado para a atualização.
     const onSubmit = async (values: AbateFormValues) => {
-        if (!user) return toast.error("Usuário não autenticado.");
+        if (!user || !role) return toast.error("Usuário não autenticado.");
 
         try {
-            if (isEditing && values.id) {
-                const { id, ...dataToUpdate } = values;
-                await updateAbate(id, dataToUpdate);
+            if (isEditing && editingId) {
+                await updateAbate(editingId, values);
                 toast.success("Registro de abate atualizado com sucesso!");
             } else {
                 const dadosCompletos = {
@@ -171,6 +163,7 @@ export default function AbatesPage() {
                     registradoPor: {
                         uid: user.uid,
                         nome: user.displayName || "Usuário",
+                        role: role
                     }
                 };
                 await addAbate(dadosCompletos);
@@ -230,7 +223,7 @@ export default function AbatesPage() {
                             {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
                         </div>
                     ) : (
-                        <GenericTable columns={columns} data={filteredAndEnrichedAbates} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} />
+                        <GenericTable columns={columns} data={abatesEnriquecidos} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} />
                     )
                 }
             />

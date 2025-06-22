@@ -11,7 +11,6 @@ import { format } from 'date-fns';
 import { ColumnDef } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
 import { Timestamp } from "firebase/firestore";
-
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";

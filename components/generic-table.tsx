@@ -1,4 +1,3 @@
-// components/generic-table.tsx
 "use client";
 
 import * as React from "react";
@@ -11,7 +10,6 @@ import {
   useReactTable,
   getSortedRowModel,
   SortingState,
-  GlobalFilterTableState,
 } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
@@ -24,13 +22,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Interface atualizada para receber os dados e os controles do filtro global
+// Interface Aprimorada
 interface GenericTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   globalFilter: string;
   setGlobalFilter: (value: string) => void;
-  tableControlsComponent?: React.ReactNode; // Componente para os filtros
+  tableControlsComponent?: React.ReactNode;
 }
 
 export function GenericTable<TData, TValue>({
@@ -53,14 +51,16 @@ export function GenericTable<TData, TValue>({
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    getFilteredRowModel: getFilteredRowModel(), // Habilita o filtro global
     getSortedRowModel: getSortedRowModel(),
   });
 
   return (
     <div className="space-y-4">
       {/* Renderiza os controles de filtro injetados pela página pai */}
-      {tableControlsComponent}
+      <div className="flex items-center">
+        {tableControlsComponent}
+      </div>
 
       <div className="rounded-md border">
         <Table>

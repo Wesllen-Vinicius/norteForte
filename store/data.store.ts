@@ -10,6 +10,7 @@ import { Fornecedor, subscribeToFornecedores } from '@/lib/services/fornecedores
 import { Abate, subscribeToAbates } from '@/lib/services/abates.services';
 import { Meta, subscribeToMetas } from '@/lib/services/metas.services';
 import { SystemUser, subscribeToUsers } from '@/lib/services/user.services';
+import { Producao, subscribeToProducoes } from '@/lib/services/producao.services'; // Importação para Produção
 
 interface DataState {
   clientes: Cliente[];
@@ -20,6 +21,7 @@ interface DataState {
   categorias: Categoria[];
   fornecedores: Fornecedor[];
   abates: Abate[];
+  producoes: Producao[]; // Adicionado estado para produções
   metas: Meta[];
   users: SystemUser[];
   isInitialized: boolean;
@@ -36,6 +38,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   categorias: [],
   fornecedores: [],
   abates: [],
+  producoes: [], // Valor inicial para produções
   metas: [],
   users: [],
   isInitialized: false,
@@ -55,6 +58,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     subscribeToCategorias((data) => set({ categorias: data }));
     subscribeToFornecedores((data) => set({ fornecedores: data }));
     subscribeToAbates((data) => set({ abates: data }));
+    subscribeToProducoes((data) => set({ producoes: data }));
     subscribeToMetas((data) => set({ metas: data }));
     subscribeToUsers((data) => set({ users: data }));
 
