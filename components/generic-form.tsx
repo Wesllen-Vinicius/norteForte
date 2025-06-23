@@ -1,10 +1,12 @@
 "use client"
 
-import { UseFormReturn, DefaultValues } from "react-hook-form"
+import { UseFormReturn, DefaultValues, FieldValues } from "react-hook-form"
 import { z } from "zod"
 import { Form } from "@/components/ui/form"
 
-export function GenericForm<T extends z.ZodType<unknown>>(
+type ZodObjectOrEffects = z.ZodObject<any, any, any> | z.ZodEffects<z.ZodObject<any, any, any>>;
+
+export function GenericForm<T extends ZodObjectOrEffects>(
   props: {
     schema: T;
     defaultValues?: DefaultValues<z.infer<T>>;

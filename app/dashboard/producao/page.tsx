@@ -14,7 +14,7 @@ import { Timestamp } from "firebase/firestore";
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/date-picker";
@@ -24,14 +24,28 @@ import { Combobox } from "@/components/ui/combobox";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
-import { producaoSchema, registrarProducao, Producao, updateProducao, deleteProducao } from "@/lib/services/producao.services";
+import { registrarProducao, Producao, updateProducao, deleteProducao } from "@/lib/services/producao.services";
 
-const formSchema = producaoSchema.omit({ registradoPor: true, id: true, createdAt: true, data: true }).extend({
-    data: z.date(),
+// CORREÇÃO: Schema específico para o formulário, evitando conflitos de tipo com o ZodResolver.
+const formItemSchema = z.object({
+    produtoId: z.string().min(1, "Selecione um produto."),
+    produtoNome: z.string(),
+    quantidade: z.coerce.number().min(0, "A quantidade deve ser um número positivo."),
+    perda: z.coerce.number().min(0, "A perda não pode ser negativa."),
 });
+
+const formSchema = z.object({
+    data: z.date(),
+    responsavelId: z.string().min(1, "Selecione um responsável."),
+    abateId: z.string().min(1, "Selecione um abate para vincular."),
+    lote: z.string().optional(),
+    descricao: z.string().optional(),
+    produtos: z.array(formItemSchema).min(1, "Adicione pelo menos um produto à produção."),
+});
+
+
 type ProducaoFormValues = z.infer<typeof formSchema>;
 type ProducaoComDetalhes = Producao & { responsavelNome?: string, registradorRole?: string };
 
@@ -55,23 +69,16 @@ interface ProdutoProducaoItemProps {
 
 function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos }: ProdutoProducaoItemProps) {
     const { produtos, metas, unidades } = useDataStore();
-
     const produtoId = useWatch({ control, name: `produtos.${index}.produtoId` });
     const quantidadeProduzida = useWatch({ control, name: `produtos.${index}.quantidade` });
 
     const { metaEsperada, unidade, metaExiste } = useMemo(() => {
         const metaProduto = (metas || []).find(m => m.produtoId === produtoId);
         const meta = metaProduto ? animaisValidos * metaProduto.metaPorAnimal : 0;
-
         const produtoInfo = (produtos || []).find(p => p.id === produtoId);
         const unidadeId = produtoInfo?.tipoProduto === 'VENDA' ? produtoInfo.unidadeId : undefined;
         const siglaUnidade = (unidades || []).find(u => u.id === unidadeId)?.sigla || 'un';
-
-        return {
-            metaEsperada: meta,
-            unidade: siglaUnidade,
-            metaExiste: !!metaProduto
-        };
+        return { metaEsperada: meta, unidade: siglaUnidade, metaExiste: !!metaProduto };
     }, [produtoId, animaisValidos, metas, produtos, unidades]);
 
     useEffect(() => {
@@ -88,11 +95,8 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
             <div className="flex items-start gap-2">
                 <div className="flex-1 space-y-2">
                     <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field }) => (
-                        <FormItem>
-                            <Combobox options={produtoOptions} {...field} placeholder="Selecione o produto" />
-                        </FormItem>
+                        <FormItem><Combobox options={produtoOptions} {...field} placeholder="Selecione o produto" /></FormItem>
                     )} />
-
                     {produtoId && !metaExiste && (
                          <Alert variant="destructive" className="mt-2 text-xs">
                             <IconAlertTriangle className="h-4 w-4" />
@@ -103,20 +107,17 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
                             </AlertDescription>
                         </Alert>
                     )}
-
                     <div className="grid grid-cols-3 gap-2">
                         <FormItem>
                             <FormLabel className="text-xs">Meta Esperada ({unidade})</FormLabel>
                             <Input value={metaEsperada.toFixed(2)} readOnly className="bg-muted-foreground/20" />
                         </FormItem>
-
                         <FormField name={`produtos.${index}.quantidade`} control={control} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="text-xs">Qtd. Produzida</FormLabel>
                                 <FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
                             </FormItem>
                         )} />
-
                         <FormField name={`produtos.${index}.perda`} control={control} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="text-xs">Perda Calculada</FormLabel>
@@ -134,7 +135,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
 }
 
 export default function ProducaoPage() {
-    const { producoes, funcionarios, abates, users, produtos} = useDataStore();
+    const { producoes, funcionarios, abates, users, produtos } = useDataStore();
     const { user, role } = useAuthStore();
 
     const [isEditing, setIsEditing] = useState(false);
@@ -142,7 +143,6 @@ export default function ProducaoPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [globalFilter, setGlobalFilter] = useState('');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const form = useForm<ProducaoFormValues>({
@@ -219,7 +219,8 @@ export default function ProducaoPage() {
         if (!user) {
             toast.error("Você precisa estar logado para realizar esta ação.");
             return;
-        };
+        }
+
         const dataParaSalvar = {
             ...values,
             produtos: values.produtos.map(p => ({
@@ -238,8 +239,9 @@ export default function ProducaoPage() {
                 toast.success("Lote de produção registrado com sucesso!");
             }
             resetForm();
-        } catch (error: any) {
-           toast.error("Falha ao registrar produção", { description: error.message });
+        } catch (error: unknown) {
+           const errorMessage = error instanceof Error ? error.message : "Falha ao registrar produção";
+           toast.error(errorMessage);
         }
     };
 
@@ -260,7 +262,7 @@ export default function ProducaoPage() {
                             <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
                                 <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
                                 <p><strong>Produzido:</strong> {p.quantidade.toFixed(2)} {unidadeNome}</p>
-                                <p className="text-destructive/80"><strong>Perda:</strong> {p.perda.toFixed(2)} {unidadeNome}</p>
+                                <p className="text-destructive/80"><strong>Perda:</strong> {(p.perda || 0).toFixed(2)} {unidadeNome}</p>
                             </div>
                         );
                     })}
@@ -313,6 +315,12 @@ export default function ProducaoPage() {
         return faltantes;
     }, [abates, funcionarios, produtos]);
 
+    const tableControls = (
+      <div className="flex flex-col md:flex-row gap-4">
+          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+      </div>
+    );
+
     const formContent = (
         dependenciasFaltantes.length > 0 && !isEditing ? (
             <Alert variant="destructive">
@@ -360,13 +368,6 @@ export default function ProducaoPage() {
         )
     );
 
-    const tableControls = (
-      <div className="flex flex-col md:flex-row gap-4">
-          <Input placeholder="Pesquisar..." value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="max-w-full md:max-w-sm" />
-          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-      </div>
-    );
-
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
             <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmDelete} title="Confirmar Exclusão" description="Esta ação é irreversível e removerá o lote de produção permanentemente."/>
@@ -377,7 +378,14 @@ export default function ProducaoPage() {
                 tableContent={
                     isLoading ?
                         <div className="space-y-2"><div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
-                        : <GenericTable columns={columns} data={filteredAndEnrichedProducoes} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} renderSubComponent={renderSubComponent} />
+                        : <GenericTable
+                            columns={columns}
+                            data={filteredAndEnrichedProducoes}
+                            renderSubComponent={renderSubComponent}
+                            tableControlsComponent={tableControls}
+                            filterPlaceholder="Filtrar por lote..."
+                            filterColumnId="lote"
+                          />
                 }
             />
         </div>

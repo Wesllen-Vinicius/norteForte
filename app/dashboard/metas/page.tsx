@@ -21,6 +21,7 @@ import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 
 type MetaFormValues = z.infer<typeof metaSchema>;
+type MetaComDetalhes = Meta & { produtoNome?: string, unidade?: string };
 
 export default function MetasPage() {
     const metas = useDataStore((state) => state.metas);
@@ -34,8 +35,9 @@ export default function MetasPage() {
         defaultValues: { produtoId: "", metaPorAnimal: 0 },
     });
 
-    const metasComDetalhes = useMemo(() => {
-        return metas.map((meta: { produtoId: string | undefined; }) => {
+    const metasComDetalhes: MetaComDetalhes[] = useMemo(() => {
+        // CORREÇÃO: Tipagem explícita 'meta: Meta' para garantir que todas as propriedades sejam mantidas
+        return metas.map((meta: Meta) => {
             const produtoAssociado = produtos.find(p => p.id === meta.produtoId);
             let unidadeNome = "N/A";
             if (produtoAssociado && produtoAssociado.tipoProduto === 'VENDA' && produtoAssociado.unidadeId) {
@@ -43,7 +45,7 @@ export default function MetasPage() {
             }
 
             return {
-                ...meta,
+                ...meta, // Agora o spread inclui todas as propriedades de 'Meta'
                 produtoNome: produtoAssociado?.nome || "N/A",
                 unidade: unidadeNome,
             };
@@ -86,7 +88,8 @@ export default function MetasPage() {
         }
     };
 
-    const columns: ColumnDef<Meta>[] = [
+    // CORREÇÃO: As colunas agora esperam o tipo 'MetaComDetalhes'
+    const columns: ColumnDef<MetaComDetalhes>[] = [
         { accessorKey: "produtoNome", header: "Produto" },
         { accessorKey: "metaPorAnimal", header: "Meta por Animal" },
         { accessorKey: "unidade", header: "Unidade" },

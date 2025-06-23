@@ -1,4 +1,7 @@
+// Em lib/schemas.ts
+
 import { z } from "zod";
+import { Timestamp } from "firebase/firestore";
 
 // =================================================================
 // Schema para Contas Bancárias
@@ -10,42 +13,45 @@ export const contaBancariaSchema = z.object({
   agencia: z.string().optional(),
   conta: z.string().optional(),
   tipo: z.enum(["Conta Corrente", "Conta Poupança", "Caixa"]),
-  saldoInicial: z.coerce.number().default(0),
-  saldoAtual: z.coerce.number().default(0),
+  saldoInicial: z.coerce.number().optional(),
+  saldoAtual: z.coerce.number().optional(),
   registradoPor: z.object({
     uid: z.string(),
     nome: z.string(),
   }).optional(),
   createdAt: z.any().optional(),
 });
-
 export type ContaBancaria = z.infer<typeof contaBancariaSchema>;
+
+// =================================================================
+// Schema para Itens de Venda/Produção
+// =================================================================
+export const itemVendidoSchema = z.object({
+  produtoId: z.string(),
+  produtoNome: z.string(),
+  quantidade: z.coerce.number().min(0),
+  precoUnitario: z.coerce.number().min(0),
+  custoUnitario: z.coerce.number().min(0),
+  estoqueDisponivel: z.number().optional().default(0),
+}).refine(
+    (data) => data.quantidade > 0 ? data.quantidade <= data.estoqueDisponivel : true,
+    (data) => ({ message: `Estoque insuficiente. Disponível: ${data.estoqueDisponivel}`, path: ["quantidade"] })
+);
+export type ItemVendido = z.infer<typeof itemVendidoSchema>;
+
+export const itemProduzidoSchema = z.object({
+  produtoId: z.string().min(1, "Selecione um produto."),
+  produtoNome: z.string(),
+  quantidade: z.coerce.number().min(0, "A quantidade deve ser um número positivo."),
+  perda: z.coerce.number().min(0, "A perda não pode ser negativa.").default(0),
+});
+export type ItemProduzido = z.infer<typeof itemProduzidoSchema>;
 
 
 // =================================================================
 // Schema para Vendas
 // =================================================================
-const itemVendidoSchema = z.object({
-  produtoId: z.string(),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
-  precoUnitario: z.coerce.number().min(0, "O preço não pode ser negativo."),
-  custoUnitario: z.coerce.number().min(0),
-  estoqueDisponivel: z.number().optional().default(0),
-}).refine(
-    (data) => {
-        if (data.quantidade > 0) {
-            return data.quantidade <= data.estoqueDisponivel;
-        }
-        return true;
-    },
-    (data) => ({
-        message: `Estoque insuficiente. Disponível: ${data.estoqueDisponivel}`,
-        path: ["quantidade"],
-    })
-);
-
-const vendaBaseSchema = z.object({
+export const vendaSchema = z.object({
   id: z.string().optional(),
   clienteId: z.string().min(1, "Selecione um cliente."),
   data: z.date({ required_error: "A data é obrigatória." }),
@@ -65,31 +71,38 @@ const vendaBaseSchema = z.object({
   }),
   createdAt: z.any().optional(),
 });
-
-export const formVendaSchema = vendaBaseSchema.omit({
-    id: true,
-    registradoPor: true,
-    status: true,
-    createdAt: true,
-    valorFinal: true,
-});
-
-export const vendaSchema = vendaBaseSchema.refine(data => {
-    if (data.condicaoPagamento === "A_PRAZO") return !!data.dataVencimento;
-    return true;
-}, {
-    message: "A data de vencimento é obrigatória para vendas a prazo.",
-    path: ["dataVencimento"],
-}).refine(data => {
-    if (data.condicaoPagamento === "A_PRAZO") {
-        return ["Boleto/Prazo", "PIX", "Dinheiro"].includes(data.metodoPagamento);
-    }
-    return true;
-}, {
-    message: "Método de pagamento inválido para vendas a prazo.",
-    path: ["metodoPagamento"],
-});
-
 export type Venda = z.infer<typeof vendaSchema>;
-export type ItemVendido = z.infer<typeof itemVendidoSchema>;
-export type VendaFormValues = z.infer<typeof formVendaSchema>;
+export type VendaFormValues = Omit<Venda, 'id' | 'registradoPor' | 'status' | 'createdAt' | 'valorFinal'>;
+
+// =================================================================
+// Schema para Produção
+// =================================================================
+export const producaoSchema = z.object({
+  id: z.string().optional(),
+  data: z.union([z.instanceof(Timestamp), z.date()]),
+  responsavelId: z.string().min(1, "Selecione um responsável."),
+  abateId: z.string().min(1, "Selecione um abate para vincular."),
+  lote: z.string().optional(),
+  descricao: z.string().optional(),
+  produtos: z.array(itemProduzidoSchema).min(1, "Adicione pelo menos um produto à produção."),
+  registradoPor: z.object({
+    uid: z.string(),
+    nome: z.string(),
+  }),
+  createdAt: z.any().optional(),
+});
+export type Producao = Omit<z.infer<typeof producaoSchema>, 'data'> & { data: Date };
+
+
+// =================================================================
+// Schema para Movimentação de Estoque
+// =================================================================
+export const movimentacaoSchema = z.object({
+  produtoId: z.string().min(1, "Selecione um produto."),
+  produtoNome: z.string(),
+  quantidade: z.number().positive("A quantidade deve ser maior que zero."),
+  tipo: z.enum(["entrada", "saida"]),
+  motivo: z.string().optional(),
+  data: z.date().optional(),
+});
+export type Movimentacao = z.infer<typeof movimentacaoSchema>;

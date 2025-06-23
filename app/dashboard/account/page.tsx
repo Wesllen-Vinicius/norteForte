@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { updateUserProfile, uploadProfileImage, changeUserPassword } from "@/lib/services/user.services";
-import { useState, useEffect } from "react";
+import { useState, useEffect, ChangeEvent, forwardRef } from "react";
 import React from "react";
 
 const profileSchema = z.object({
@@ -28,6 +28,12 @@ const passwordSchema = z.object({
     message: "As senhas não coincidem.",
     path: ["confirmPassword"],
 });
+
+// Componente intermediário para remover a prop 'value' do input de arquivo
+const FileInput = forwardRef<HTMLInputElement, Omit<React.ComponentProps<typeof Input>, 'value'>>((props, ref) => {
+    return <Input {...props} ref={ref} />;
+});
+FileInput.displayName = "FileInput";
 
 
 export default function AccountPage() {
@@ -114,10 +120,22 @@ export default function AccountPage() {
                                     <AvatarImage src={photoPreview ?? undefined} />
                                     <AvatarFallback className="text-2xl">{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <FormField name="photoFile" control={profileForm.control} render={({ field: { onChange, ...rest } }) => (
+                                <FormField
+                                    name="photoFile"
+                                    control={profileForm.control}
+                                    render={({ field: { onChange, onBlur, name, ref }}) => (
                                     <FormItem>
                                         <FormLabel>Nova Foto de Perfil</FormLabel>
-                                        <FormControl><Input type="file" accept="image/*" onChange={(e) => onChange(e.target.files)} {...rest} /></FormControl>
+                                        <FormControl>
+                                            <FileInput
+                                                type="file"
+                                                accept="image/*"
+                                                onBlur={onBlur}
+                                                name={name}
+                                                ref={ref}
+                                                onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.files)}
+                                            />
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />

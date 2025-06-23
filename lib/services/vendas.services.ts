@@ -117,7 +117,8 @@ export const updateVendaStatus = async (id: string, status: 'Paga' | 'Pendente')
 export const updateVenda = async (id: string, vendaData: Partial<Omit<Venda, 'id'>>) => {
     const vendaDocRef = doc(db, "vendas", id);
 
-    const dataToUpdate: { [key: string]: unknown } = { ...vendaData };
+    // CORREÇÃO: Alterado o tipo de 'unknown' para 'any' para ser compatível com o updateDoc do Firebase
+    const dataToUpdate: { [key: string]: any } = { ...vendaData };
 
     if (vendaData.data) {
         dataToUpdate.data = Timestamp.fromDate(vendaData.data as Date);

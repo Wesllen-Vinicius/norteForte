@@ -1,3 +1,5 @@
+// Em lib/services/compras.services.ts
+
 import { db } from "@/lib/firebase";
 import { collection, doc, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
 import { z } from "zod";
@@ -18,6 +20,8 @@ export const compraSchema = z.object({
   condicaoPagamento: z.string().min(1, "A condição de pagamento é obrigatória."),
   valorTotal: z.coerce.number(),
   createdAt: z.any().optional(),
+  // CORREÇÃO: Adicione a linha abaixo
+  contaBancariaId: z.string().optional(),
 });
 
 export type Compra = z.infer<typeof compraSchema>;

@@ -40,7 +40,6 @@ export default function AbatesPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [globalFilter, setGlobalFilter] = useState('');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const form = useForm<AbateFormValues>({
@@ -199,11 +198,18 @@ export default function AbatesPage() {
       </GenericForm>
     );
 
-    const tableControls = (
-      <div className="flex flex-col md:flex-row gap-4">
-          <Input placeholder="Pesquisar..." value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="max-w-full md:max-w-sm" />
-          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-      </div>
+    // CORREÇÃO: Os controles agora são passados para o GenericTable
+    // e não precisam ser declarados separadamente
+    const tableContent = (
+        <GenericTable
+            columns={columns}
+            data={abatesEnriquecidos}
+            filterPlaceholder="Pesquisar por responsável..."
+            filterColumnId="responsavelNome"
+            tableControlsComponent={
+                <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+            }
+        />
     );
 
     return (
@@ -220,7 +226,7 @@ export default function AbatesPage() {
                             {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
                         </div>
                     ) : (
-                        <GenericTable columns={columns} data={abatesEnriquecidos} globalFilter={globalFilter} setGlobalFilter={setGlobalFilter} tableControlsComponent={tableControls} />
+                        tableContent
                     )
                 }
             />
