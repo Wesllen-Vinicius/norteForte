@@ -1,14 +1,13 @@
 "use client"
 
 import React, { useState, useMemo, useEffect } from "react"
-import { ColumnDef, Row } from "@tanstack/react-table"
+import { ColumnDef, Row, CellContext } from "@tanstack/react-table"
 import { DateRange } from "react-day-picker"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { saveAs } from "file-saver"
-
 import { GenericTable } from "@/components/generic-table"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,52 +21,52 @@ import { Badge } from "@/components/ui/badge"
 import { useDataStore } from "@/store/data.store"
 import { IconFileTypePdf, IconFileTypeXls, IconChevronDown, IconChevronUp } from "@tabler/icons-react"
 import { Progress } from "@/components/ui/progress"
+import { Movimentacao } from "@/lib/services/estoque.services"
+import { Venda } from "@/lib/schemas"
+import { Producao } from "@/lib/services/producao.services"
 
 type ReportType = 'movimentacoes' | 'vendas' | 'producao';
 type ExportType = 'pdf' | 'csv';
 
-// Componente para o resumo do relatório de produção
-const ProductionReportSummary = ({ summary }: { summary: any }) => (
+type EnrichedVenda = Venda & { clienteNome: string };
+type EnrichedProducao = Producao & { responsavelNome: string; registradoPorNome: string; };
+type ReportData = EnrichedVenda | EnrichedProducao | Movimentacao;
+
+interface SummaryProps {
+    summary: { totalProduzido: number; totalPerdas: number; totalBruto: number; rendimento: number };
+}
+interface SubComponentProps<TData> {
+    row: Row<TData>;
+}
+
+const ProductionReportSummary = ({ summary }: SummaryProps) => (
     <div className="mb-6 space-y-4 rounded-lg border bg-muted/50 p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-            <div className="rounded-lg border bg-card p-3">
-                <p className="text-sm text-muted-foreground">Total Produzido</p>
-                <p className="text-xl font-bold text-green-500">{summary.totalProduzido.toFixed(2)} kg</p>
-            </div>
-            <div className="rounded-lg border bg-card p-3">
-                <p className="text-sm text-muted-foreground">Total de Perdas</p>
-                <p className="text-xl font-bold text-destructive">{summary.totalPerdas.toFixed(2)} kg</p>
-            </div>
-             <div className="rounded-lg border bg-card p-3">
-                <p className="text-sm text-muted-foreground">Peso Total (Bruto)</p>
-                <p className="text-xl font-bold">{summary.totalBruto.toFixed(2)} kg</p>
-            </div>
+            <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Total Produzido</p><p className="text-xl font-bold text-green-500">{summary.totalProduzido.toFixed(2)} kg</p></div>
+            <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Total de Perdas</p><p className="text-xl font-bold text-destructive">{summary.totalPerdas.toFixed(2)} kg</p></div>
+            <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Peso Total (Bruto)</p><p className="text-xl font-bold">{summary.totalBruto.toFixed(2)} kg</p></div>
         </div>
         <div>
-            <div className="flex justify-between mb-1">
-                <span className="text-base font-medium text-muted-foreground">Rendimento Geral do Período</span>
-                 <span className="text-base font-bold text-primary">{summary.rendimento.toFixed(1)}%</span>
-            </div>
+            <div className="flex justify-between mb-1"><span className="text-base font-medium text-muted-foreground">Rendimento Geral do Período</span><span className="text-base font-bold text-primary">{summary.rendimento.toFixed(1)}%</span></div>
             <Progress value={summary.rendimento} className="h-3" />
         </div>
     </div>
 );
 
-// Componente para os detalhes da linha (Produção)
-const renderSubComponentProducao = ({ row }: { row: Row<any> }) => {
+const renderSubComponentProducao = ({ row }: SubComponentProps<EnrichedProducao>) => {
     const { unidades, produtos } = useDataStore.getState();
     return (
         <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95">
             <h4 className="font-semibold text-sm mb-2">Produtos do Lote: {row.original.lote}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {row.original.produtos.map((p: any, i: number) => {
+                {row.original.produtos.map((p, i) => {
                     const produtoInfo = produtos.find(prod => prod.id === p.produtoId);
                     const unidadeNome = produtoInfo?.tipoProduto === 'VENDA' ? unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un' : 'un';
                     return (
                         <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
                             <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
                             <p><strong>Produzido:</strong> {p.quantidade.toFixed(2)} {unidadeNome}</p>
-                            <p className="text-destructive/80"><strong>Perda:</strong> {p.perda.toFixed(2)} {unidadeNome}</p>
+                            <p className="text-destructive/80"><strong>Perda:</strong> {(p.perda || 0).toFixed(2)} {unidadeNome}</p>
                         </div>
                     );
                 })}
@@ -76,13 +75,12 @@ const renderSubComponentProducao = ({ row }: { row: Row<any> }) => {
     );
 };
 
-// Componente para os detalhes da linha (Vendas)
-const renderSubComponentVendas = ({ row }: { row: Row<any> }) => {
+const renderSubComponentVendas = ({ row }: SubComponentProps<EnrichedVenda>) => {
     return (
          <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95">
             <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                 {row.original.produtos.map((p: any, i: number) => (
+                 {row.original.produtos.map((p, i) => (
                     <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
                         <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
                         <p><strong>Quantidade:</strong> {p.quantidade}</p>
@@ -94,112 +92,106 @@ const renderSubComponentVendas = ({ row }: { row: Row<any> }) => {
     );
 };
 
-
 export default function RelatoriosPage() {
     const [date, setDate] = useState<DateRange | undefined>();
     const [reportType, setReportType] = useState<ReportType>('movimentacoes');
-    const [reportData, setReportData] = useState<any[]>([]);
+    const [reportData, setReportData] = useState<ReportData[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [globalFilter, setGlobalFilter] = useState('');
-
     const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
     const [exportType, setExportType] = useState<ExportType | null>(null);
     const [selectedColumns, setSelectedColumns] = useState<Record<string, boolean>>({});
-
     const { clientes, funcionarios, users } = useDataStore();
 
-    const enrichedData = useMemo(() => {
+    const enrichedData = useMemo((): ReportData[] => {
         if (!reportData.length) return [];
         switch (reportType) {
             case 'vendas':
-                return reportData.map(v => ({...v, clienteNome: clientes.find(c => c.id === v.clienteId)?.nome || 'N/A' }));
+                return (reportData as Venda[]).map((v): EnrichedVenda => ({ ...v, clienteNome: clientes.find(c => c.id === v.clienteId)?.nome || 'N/A' }));
             case 'producao':
-                 return reportData.map(p => ({
+                 return (reportData as Producao[]).map((p): EnrichedProducao => ({
                     ...p,
                     responsavelNome: funcionarios.find(f => f.id === p.responsavelId)?.nomeCompleto || 'N/A',
                     registradoPorNome: p.registradoPor.nome || users.find(u => u.uid === p.registradoPor.uid)?.displayName || 'N/A',
                 }));
             default:
-                return reportData;
+                return reportData as Movimentacao[];
         }
     }, [reportData, reportType, clientes, funcionarios, users]);
 
     const productionSummary = useMemo(() => {
         if (reportType !== 'producao' || !enrichedData.length) return null;
-
+        const data = enrichedData as EnrichedProducao[];
         let totalProduzido = 0;
         let totalPerdas = 0;
-
-        enrichedData.forEach(p => {
-            if(p.produtos && Array.isArray(p.produtos)) {
-                p.produtos.forEach((item: any) => {
+        data.forEach(p => {
+            if (p.produtos && Array.isArray(p.produtos)) {
+                p.produtos.forEach(item => {
                     totalProduzido += Number(item.quantidade) || 0;
                     totalPerdas += Number(item.perda) || 0;
                 });
             }
         });
-
         const totalBruto = totalProduzido + totalPerdas;
         const rendimento = totalBruto > 0 ? (totalProduzido / totalBruto) * 100 : 0;
-
         return { totalProduzido, totalPerdas, totalBruto, rendimento };
     }, [enrichedData, reportType]);
 
-
-    const availableColumns = useMemo<ColumnDef<any>[]>(() => {
-        const expanderColumn: ColumnDef<any> = {
+    const availableColumns = useMemo<ColumnDef<ReportData>[]>(() => {
+        const expanderColumn: ColumnDef<ReportData> = {
             id: 'expander',
-            header: null,
+            header: () => null,
             cell: ({ row }) => (
                 <Button variant="ghost" size="icon" onClick={() => row.toggleExpanded()} className="h-8 w-8">
                     {row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}
                 </Button>
             ),
         };
-        const baseColumns = [
-            { id: 'data', header: "Data", accessorKey: "data", cell: ({ row }: any) => format(row.original.data, "dd/MM/yyyy HH:mm") },
+        const baseColumns: ColumnDef<ReportData>[] = [
+            { id: 'data', header: "Data", accessorKey: "data", cell: ({ row }) => row.original.data ? format(row.original.data, "dd/MM/yyyy HH:mm") : 'N/A' },
         ];
         switch (reportType) {
             case 'vendas':
                 return [
                     expanderColumn, ...baseColumns,
                     { id: 'clienteNome', header: "Cliente", accessorKey: "clienteNome" },
-                    { id: 'itens', header: "Nº Itens", cell: ({ row }: any) => row.original.produtos.length },
+                    { id: 'itens', header: "Nº Itens", cell: ({ row }) => (row.original as EnrichedVenda).produtos.length },
                     { id: 'condicaoPagamento', header: "Cond. Pagamento", accessorKey: "condicaoPagamento" },
-                    { id: 'valorTotal', header: "Valor Total", accessorKey: "valorTotal", cell: ({ row }: any) => `R$ ${row.original.valorTotal.toFixed(2)}` }
-                ];
+                    { id: 'valorTotal', header: "Valor Total", accessorKey: "valorTotal", cell: ({ row }) => `R$ ${(row.original as EnrichedVenda).valorTotal.toFixed(2)}` }
+                ] as ColumnDef<ReportData>[];
             case 'producao':
                  return [
                     expanderColumn, ...baseColumns,
                     { id: 'lote', header: "Lote", accessorKey: "lote" },
                     { id: 'responsavelNome', header: "Responsável", accessorKey: "responsavelNome" },
                     { id: 'registradoPorNome', header: "Registrado Por", accessorKey: "registradoPorNome"},
-                    { id: 'produtos', header: "Nº Produtos", cell: ({ row }: any) => row.original.produtos.length },
-                ];
+                    { id: 'produtos', header: "Nº Produtos", cell: ({ row }) => (row.original as EnrichedProducao).produtos.length },
+                ] as ColumnDef<ReportData>[];
             case 'movimentacoes':
             default:
                  return [
                     ...baseColumns,
                     { id: 'produtoNome', header: "Produto", accessorKey: "produtoNome" },
-                    { id: 'tipo', header: "Tipo", accessorKey: 'tipo', cell: ({ row }: any) => <Badge variant={row.original.tipo === 'entrada' ? 'default' : 'destructive'} className="capitalize">{row.original.tipo}</Badge> },
+                    { id: 'tipo', header: "Tipo", accessorKey: 'tipo', cell: ({ row }) => <Badge variant={(row.original as Movimentacao).tipo === 'entrada' ? 'default' : 'destructive'} className="capitalize">{(row.original as Movimentacao).tipo}</Badge> },
                     { id: 'quantidade', header: "Quantidade", accessorKey: "quantidade" },
                     { id: 'motivo', header: "Motivo", accessorKey: "motivo" },
-                ];
+                ] as ColumnDef<ReportData>[];
         }
     }, [reportType]);
 
     useEffect(() => {
         const initialSelection: Record<string, boolean> = {};
         availableColumns.forEach(col => {
-            if(col.id && col.header) initialSelection[col.id] = true;
+            if (col.id && 'header' in col && typeof col.header === 'string') {
+                initialSelection[col.id] = true;
+            }
         });
         setSelectedColumns(initialSelection);
     }, [availableColumns]);
 
     const renderSubComponent = useMemo(() => {
         switch(reportType) {
-            case 'producao': return renderSubComponentProducao;
-            case 'vendas': return renderSubComponentVendas;
+            case 'producao': return renderSubComponentProducao as (props: SubComponentProps<ReportData>) => React.ReactElement;
+            case 'vendas': return renderSubComponentVendas as (props: SubComponentProps<ReportData>) => React.ReactElement;
             default: return undefined;
         }
     }, [reportType]);
@@ -215,48 +207,50 @@ export default function RelatoriosPage() {
                 'movimentacoes': getMovimentacoesPorPeriodo,
             };
             const data = await reportFetchers[reportType](date.from, date.to);
-            setReportData(data);
+            setReportData(data as ReportData[]);
             if (data.length === 0) toast.info("Nenhum dado encontrado para os filtros selecionados.");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao gerar o relatório.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    const getExportValue = (row: any, column: ColumnDef<any>): string => {
-        const accessorKey = (column as any).accessorKey;
-        const rawValue = accessorKey ? row[accessorKey] : undefined;
+    // CORREÇÃO APLICADA AQUI
+    const getExportValue = (row: ReportData, column: ColumnDef<ReportData>): string => {
+        if ('accessorKey' in column && column.accessorKey) {
+            const accessorKey = column.accessorKey as keyof ReportData;
+            const value = (row as any)[accessorKey];
 
-        if (column.cell && typeof column.cell === 'function') {
-            const cellContext = {
-                row: { original: row },
-                getValue: () => rawValue,
-            };
+            if (column.cell && typeof column.cell === 'function') {
+                // Criamos um contexto mock, passando a estrutura que a célula espera
+                const cellContext = {
+                    row: { original: row }
+                } as CellContext<ReportData, unknown>;
 
-            const renderedOutput = column.cell(cellContext as any);
+                const renderedOutput = column.cell(cellContext);
 
-            if (renderedOutput === null || renderedOutput === undefined) return '';
+                if (renderedOutput === null || renderedOutput === undefined) return '';
 
-            if (React.isValidElement(renderedOutput)) {
-                const children = (renderedOutput as React.ReactElement<{ children?: React.ReactNode }>).props.children;
-                return children ? String(children) : '';
+                if (React.isValidElement(renderedOutput)) {
+                    // Tipamos as props para acessar 'children' de forma segura
+                    const props = renderedOutput.props as { children?: React.ReactNode };
+                    return props.children ? String(props.children) : '';
+                }
+                return String(renderedOutput);
             }
-            return String(renderedOutput);
+            return String(value ?? '');
         }
-
-        return String(rawValue ?? '');
+        return '';
     };
 
     const handleConfirmExport = () => {
-        const columnsToExport = availableColumns.filter(col => col.header && selectedColumns[col.id!]);
+        const columnsToExport = availableColumns.filter(col => col.id && 'header' in col && col.header && selectedColumns[col.id]);
         if (columnsToExport.length === 0) return toast.error("Selecione pelo menos uma coluna para exportar.");
-
-        const headers = columnsToExport.map(col => col.header as string);
+        const headers = columnsToExport.map(col => String('header' in col ? col.header : ''));
         const data = enrichedData.map(row =>
             columnsToExport.map(col => getExportValue(row, col))
         );
-
         if (exportType === 'pdf') {
             const doc = new jsPDF();
             autoTable(doc, { head: [headers], body: data });
@@ -285,12 +279,12 @@ export default function RelatoriosPage() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Selecionar Colunas para Exportação</DialogTitle></DialogHeader>
                     <div className="grid grid-cols-2 gap-4 py-4">
-                        {availableColumns.filter(c => typeof c.header === 'string').map(col => {
+                        {availableColumns.filter(c => 'header' in c && typeof c.header === 'string').map(col => {
                             const key = col.id as string;
                             return (
                                 <div key={key} className="flex items-center space-x-2">
                                     <Checkbox id={key} checked={!!selectedColumns[key]} onCheckedChange={(checked) => setSelectedColumns(p => ({...p, [key]: !!checked}))} />
-                                    <Label htmlFor={key} className="font-normal">{col.header as string}</Label>
+                                    <Label htmlFor={key} className="font-normal">{String('header' in col ? col.header : '')}</Label>
                                 </div>
                             );
                         })}
@@ -345,13 +339,11 @@ export default function RelatoriosPage() {
                     </CardHeader>
                     <CardContent>
                         {reportType === 'producao' && productionSummary && <ProductionReportSummary summary={productionSummary} />}
-                        <GenericTable
+                        <GenericTable<ReportData>
                             columns={availableColumns}
                             data={enrichedData}
-                            globalFilter={globalFilter}
-                            setGlobalFilter={setGlobalFilter}
                             renderSubComponent={renderSubComponent}
-                            enableMultiRowExpansion={false}
+                            filterPlaceholder="Filtrar..."
                         />
                     </CardContent>
                 </Card>

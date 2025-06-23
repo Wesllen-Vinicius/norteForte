@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import {
   fetchBancos,
-  fetchAgenciasBancoDoBrasil,
-  Banco,
   Agencia,
+  Banco,
+  fetchAgenciasBancoDoBrasil,
 } from "@/lib/services/bancos.service";
 import { CrudLayout } from "@/components/crud-layout";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ import {
   SelectGroup,
   SelectItem,
 } from "@/components/ui/select";
+import { ColumnDef } from "@tanstack/react-table";
 
 type FormValues = z.infer<typeof contaBancariaSchema>;
 
@@ -50,6 +51,7 @@ export default function ContasBancariasPage() {
   const [bancosList, setBancosList] = useState<Banco[]>([]);
   const [agenciasList, setAgenciasList] = useState<Agencia[]>([]);
 
+  // CORREÇÃO: Definindo valores padrão completos e corretos
   const form = useForm<FormValues>({
     resolver: zodResolver(contaBancariaSchema),
     defaultValues: {
@@ -59,6 +61,7 @@ export default function ContasBancariasPage() {
       conta: "",
       tipo: "Conta Corrente",
       saldoInicial: 0,
+      saldoAtual: 0,
     },
   });
 
@@ -90,13 +93,10 @@ export default function ContasBancariasPage() {
   const onSubmit = async (values: FormValues) => {
     if (!user) return toast.error("Usuário não autenticado.");
 
+    // Garantindo que saldoInicial seja um número
     const payload = {
-      nomeConta: values.nomeConta,
-      banco: values.banco,
-      agencia: values.agencia,
-      conta: values.conta,
-      tipo: values.tipo,
-      saldoInicial: values.saldoInicial,
+      ...values,
+      saldoInicial: values.saldoInicial || 0,
     };
 
     try {
@@ -110,7 +110,15 @@ export default function ContasBancariasPage() {
         });
         toast.success("Conta adicionada!");
       }
-      form.reset();
+      form.reset({
+        nomeConta: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        tipo: "Conta Corrente",
+        saldoInicial: 0,
+        saldoAtual: 0,
+      });
       setIsEditing(false);
       setAgenciasList([]);
     } catch {
@@ -121,11 +129,12 @@ export default function ContasBancariasPage() {
   const handleEdit = (data: ContaBancaria) => {
     form.reset(data);
     setIsEditing(true);
-    onSelectBanco(data.banco);
-    form.setValue("agencia", data.agencia);
+    if(data.banco) onSelectBanco(data.banco);
+    if(data.agencia) form.setValue("agencia", data.agencia);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string | undefined) => {
+    if(!id) return;
     if (!confirm("Confirma exclusão?")) return;
     try {
       await deleteContaBancaria(id);
@@ -135,7 +144,7 @@ export default function ContasBancariasPage() {
     }
   };
 
-  const columns = [
+  const columns: ColumnDef<ContaBancaria>[] = [
     { header: "Nome", accessorKey: "nomeConta" },
     { header: "Banco", accessorKey: "banco" },
     { header: "Agência", accessorKey: "agencia" },
@@ -143,19 +152,26 @@ export default function ContasBancariasPage() {
     {
       header: "Saldo Atual",
       accessorKey: "saldoAtual",
-      cell: ({ row }: any) => `R$ ${row.original.saldoAtual.toFixed(2)}`,
+      cell: ({ row }) => `R$ ${(row.original.saldoAtual ?? 0).toFixed(2)}`,
     },
     {
+      id: "actions",
       header: "Ações",
-      accessorKey: "actions",
-      cell: ({ row }: any) => (
-        <div className="flex gap-2">
+      cell: ({ row }) => (
+        <div className="flex gap-2 justify-end">
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleEdit(row.original)}
           >
             Editar
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => handleDelete(row.original.id)}
+          >
+            Excluir
           </Button>
         </div>
       ),
@@ -187,40 +203,34 @@ export default function ContasBancariasPage() {
             )}
           />
 
-          {/* Campo Tipo usando seu Select Radix */}
           <FormField
             name="tipo"
             control={form.control}
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Tipo</FormLabel>
-                <FormControl>
-                  <Select
-                    onValueChange={(val) => field.onChange(val)}
-                    value={field.value}
-                  >
+                <Select
+                  onValueChange={(val) => field.onChange(val)}
+                  value={field.value}
+                >
+                  <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Selecione o tipo" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="Conta Corrente">
-                          Conta Corrente
-                        </SelectItem>
-                        <SelectItem value="Conta Poupança">
-                          Conta Poupança
-                        </SelectItem>
-                        <SelectItem value="Caixa">Caixa</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </FormControl>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="Conta Corrente">Conta Corrente</SelectItem>
+                      <SelectItem value="Conta Poupança">Conta Poupança</SelectItem>
+                      <SelectItem value="Caixa">Caixa</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          {/* Campo Banco usando Combobox */}
           <FormField
             name="banco"
             control={form.control}
@@ -230,7 +240,7 @@ export default function ContasBancariasPage() {
                 <FormControl>
                   <Combobox
                     options={bancosOptions}
-                    value={field.value}
+                    value={field.value ?? ""}
                     onChange={(val) => {
                       field.onChange(val);
                       onSelectBanco(val);
@@ -257,6 +267,7 @@ export default function ContasBancariasPage() {
                       list="agencias"
                       placeholder="Ex: 0001-2"
                       {...field}
+                      value={field.value ?? ""}
                     />
                   </FormControl>
                   <FormMessage />
@@ -271,7 +282,7 @@ export default function ContasBancariasPage() {
                 <FormItem>
                   <FormLabel>Conta</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: 12345-6" {...field} />
+                    <Input placeholder="Ex: 12345-6" {...field} value={field.value ?? ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -286,7 +297,7 @@ export default function ContasBancariasPage() {
               <FormItem>
                 <FormLabel>Saldo Inicial</FormLabel>
                 <FormControl>
-                  <Input type="number" {...field} disabled={isEditing} />
+                  <Input type="number" {...field} value={field.value ?? 0} disabled={isEditing} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -336,8 +347,8 @@ export default function ContasBancariasPage() {
         <GenericTable
           columns={columns}
           data={contasBancarias}
-          globalFilter=""
-          setGlobalFilter={() => {}}
+          filterPlaceholder="Buscar por nome da conta..."
+          filterColumnId="nomeConta"
         />
       }
     />

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react";
-import { onSnapshot, collection, doc, updateDoc } from "firebase/firestore";
+import { onSnapshot, collection } from "firebase/firestore";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -12,9 +12,9 @@ import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ContaAReceber } from "@/lib/schemas";
-import { updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
+
+// CORREÇÃO: Importando 'ContaAReceber' do local correto
+import { ContaAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
 import { useDataStore } from "@/store/data.store";
 import { updateVendaStatus } from "@/lib/services/vendas.services";
 
@@ -23,7 +23,6 @@ type ContaComNome = ContaAReceber & { clienteNome?: string };
 export default function ContasAReceberPage() {
     const [contas, setContas] = useState<ContaAReceber[]>([]);
     const clientes = useDataStore((state) => state.clientes);
-    const [globalFilter, setGlobalFilter] = useState('');
 
     useEffect(() => {
         const unsubContas = onSnapshot(collection(db, "contasAReceber"), (snapshot) => {
@@ -74,8 +73,6 @@ export default function ContasAReceberPage() {
         )}
     ];
 
-    const tableControls = (<Input placeholder="Pesquisar por cliente..." value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="max-w-full md:max-w-sm" />);
-
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
             <Card>
@@ -84,12 +81,12 @@ export default function ContasAReceberPage() {
                     <CardDescription>Visualize e gerencie as contas de vendas a prazo.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {/* CORREÇÃO: Removidas as props de filtro antigas e adicionadas as novas */}
                     <GenericTable
                         columns={columns}
                         data={contasComCliente}
-                        globalFilter={globalFilter}
-                        setGlobalFilter={setGlobalFilter}
-                        tableControlsComponent={tableControls}
+                        filterPlaceholder="Pesquisar por cliente..."
+                        filterColumnId="clienteNome"
                     />
                 </CardContent>
             </Card>

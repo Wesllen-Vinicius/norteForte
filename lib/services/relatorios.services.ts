@@ -1,9 +1,8 @@
 // lib/services/relatorios.services.ts
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, Timestamp } from "firebase/firestore";
-import { Movimentacao } from "./estoque.services";
-import { Venda } from "./vendas.services";
-import { Producao } from "./producao.services";
+// CORREÇÃO: Importando os tipos do arquivo centralizado
+import { Movimentacao, Venda, Producao } from "@/lib/schemas";
 
 const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, dataFim: Date): Promise<T[]> => {
     const collectionRef = collection(db, collectionName);
@@ -22,10 +21,13 @@ const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, data
 
     querySnapshot.forEach((doc) => {
         const docData = doc.data();
+        // Garante que a conversão de data seja segura
+        const dataConvertida = docData.data instanceof Timestamp ? docData.data.toDate() : new Date();
+
         const typedData = {
           ...docData,
           id: doc.id,
-          data: (docData.data as Timestamp).toDate(),
+          data: dataConvertida,
         } as T;
         data.push(typedData);
     });

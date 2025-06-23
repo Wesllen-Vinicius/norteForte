@@ -24,27 +24,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from "./ui/input";
 
-interface GenericTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
-  data: TData[];
-  globalFilter: string;
-  setGlobalFilter: (value: string) => void;
-  tableControlsComponent?: React.ReactNode;
-  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
-  enableMultiRowExpansion?: boolean;
+// Definindo as propriedades diretamente na função para melhor inferência
+interface GenericTableProps<TData extends object> {
+    data: TData[];
+    columns: ColumnDef<TData, any>[];
+    filterPlaceholder?: string;
+    filterColumnId?: keyof TData;
+    renderSubComponent?: (props: { row: Row<TData> }) => React.ReactElement;
+    tableControlsComponent?: React.ReactNode;
 }
 
-export function GenericTable<TData, TValue>({
+// CORREÇÃO: Adicionando a restrição "extends object" ao tipo genérico TData
+export function GenericTable<TData extends object>({
   columns,
   data,
-  globalFilter,
-  setGlobalFilter,
-  tableControlsComponent,
+  filterPlaceholder,
+  filterColumnId,
   renderSubComponent,
-}: GenericTableProps<TData, TValue>) {
+  tableControlsComponent,
+}: GenericTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const [globalFilter, setGlobalFilter] = React.useState('');
 
   const table = useReactTable({
     data,
@@ -62,22 +65,21 @@ export function GenericTable<TData, TValue>({
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     onExpandedChange: (updater) => {
-        setExpanded((prev: Record<string, boolean>) => {
-            const newExpanded = typeof updater === 'function' ? updater(prev) : updater;
-
-            if (Object.keys(newExpanded).length > 1) {
-                const newKey = Object.keys(newExpanded).find(k => !(k in prev));
-                return newKey ? { [newKey]: true } : newExpanded;
-            }
-
-            return newExpanded;
-        });
+        setExpanded((prev) => (typeof updater === 'function' ? updater(prev) : updater));
     },
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center">
+        {filterPlaceholder && filterColumnId && (
+            <Input
+                placeholder={filterPlaceholder}
+                value={globalFilter}
+                onChange={(event) => setGlobalFilter(String(event.target.value))}
+                className="max-w-sm"
+            />
+        )}
         {tableControlsComponent}
       </div>
 

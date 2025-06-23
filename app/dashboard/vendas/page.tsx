@@ -22,9 +22,44 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { formVendaSchema, Venda, ItemVendido, VendaFormValues } from "@/lib/schemas";
+import { Venda, ItemVendido } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
+import { z } from "zod";
 
+// CORREÇÃO: Schema específico para o formulário, resolvendo o conflito de tipo.
+const itemVendidoFormSchema = z.object({
+    produtoId: z.string(),
+    produtoNome: z.string(),
+    quantidade: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
+    precoUnitario: z.coerce.number().min(0, "O preço não pode ser negativo."),
+    custoUnitario: z.coerce.number().min(0),
+    // Corrigido: 'estoqueDisponivel' agora é um número, sem ser opcional
+    estoqueDisponivel: z.number(),
+}).refine(
+    (data) => data.quantidade > 0 ? data.quantidade <= data.estoqueDisponivel : true,
+    (data) => ({ message: `Estoque insuficiente. Disponível: ${data.estoqueDisponivel}`, path: ["quantidade"] })
+);
+
+const formVendaSchema = z.object({
+  clienteId: z.string().min(1, "Selecione um cliente."),
+  data: z.date({ required_error: "A data é obrigatória." }),
+  produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto à venda."),
+  valorTotal: z.coerce.number().min(0, "O valor total não pode ser negativo."),
+  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
+  metodoPagamento: z.string({ required_error: "O método de pagamento é obrigatório." }).min(1, "O método de pagamento é obrigatório."),
+  contaBancariaId: z.string().optional(),
+  numeroParcelas: z.coerce.number().optional(),
+  taxaCartao: z.coerce.number().optional(),
+  dataVencimento: z.date().optional(),
+}).refine(data => {
+    if (data.condicaoPagamento === "A_PRAZO") return !!data.dataVencimento;
+    return true;
+}, {
+    message: "A data de vencimento é obrigatória para vendas a prazo.",
+    path: ["dataVencimento"],
+});
+
+type VendaFormValues = z.infer<typeof formVendaSchema>;
 type VendaComDetalhes = Venda & { clienteNome?: string };
 
 const defaultFormValues: VendaFormValues = {
@@ -117,7 +152,6 @@ export default function VendasPage() {
     const { user, role } = useAuthStore();
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [globalFilter, setGlobalFilter] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [valorFinalCalculado, setValorFinalCalculado] = useState(0);
 
@@ -321,316 +355,39 @@ export default function VendasPage() {
              <Form {...form}>
                 <fieldset disabled={role !== 'ADMINISTRADOR'} className="space-y-6 disabled:opacity-70 disabled:pointer-events-none">
                     <form onSubmit={form.handleSubmit(onSubmit)} id="venda-form">
-                        {/* Card: Dados da Venda */}
-<Card className="mb-6">
-  <CardHeader>
-    <CardTitle>{isEditing ? 'Editar Venda' : 'Dados da Venda'}</CardTitle>
-    {!isEditing && (
-      <CardDescription>
-        Selecione o cliente, a data e os produtos vendidos.
-      </CardDescription>
-    )}
-  </CardHeader>
-  <CardContent className="space-y-4">
-    <div className="grid md:grid-cols-2 gap-4">
-      <FormField
-        name="clienteId"
-        control={form.control}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Cliente</FormLabel>
-            <Combobox
-              options={clientesOptions}
-              value={field.value}
-              onChange={field.onChange}
-              placeholder="Selecione um cliente"
-              searchPlaceholder="Buscar cliente..."
-            />
-          </FormItem>
-        )}
-      />
-      <FormField
-        name="data"
-        control={form.control}
-        render={({ field }) => (
-          <FormItem className="flex flex-col">
-            <FormLabel>Data da Venda</FormLabel>
-            <FormControl>
-              <DatePicker date={field.value} onDateChange={field.onChange} />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-    </div>
-
-    <Separator />
-
-    <div className="space-y-3">
-      <FormLabel>Produtos Vendidos</FormLabel>
-      {fields.map((field, index) => (
-        <ItemProdutoVenda
-          key={field.id}
-          index={index}
-          control={form.control}
-          remove={remove}
-          handleProdutoChange={handleProdutoChange}
-          produtosParaVendaOptions={produtosParaVendaOptions}
-        />
-      ))}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          append({
-            produtoId: "",
-            quantidade: 1,
-            precoUnitario: 0,
-            produtoNome: "",
-            custoUnitario: 0,
-            estoqueDisponivel: 0,
-          })
-        }
-      >
-        <IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto
-      </Button>
-    </div>
-  </CardContent>
-</Card>
-
-{/* Card: Detalhes do Pagamento */}
-<Card>
-  <CardHeader>
-    <CardTitle>Detalhes do Pagamento</CardTitle>
-  </CardHeader>
-  <CardContent className="relative space-y-4">
-    <fieldset
-      disabled={isPaymentDisabled}
-      className="space-y-4 disabled:opacity-50"
-    >
-      {isPaymentDisabled && (
-        <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded-lg">
-          <div className="flex items-center gap-2 text-muted-foreground font-medium">
-            <IconLock className="h-5 w-5" />
-            <span>Selecione cliente e produtos para continuar</span>
-          </div>
-        </div>
-      )}
-
-      {/* Campos de Condição e Método */}
-      <div className="grid md:grid-cols-2 gap-4 items-start">
-        <FormField
-          name="condicaoPagamento"
-          control={form.control}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Condição</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="A_VISTA">À Vista</SelectItem>
-                  <SelectItem value="A_PRAZO">A Prazo</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {condicaoPagamento === "A_VISTA" ? (
-          <FormField
-            name="metodoPagamento"
-            control={form.control}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Método de Pagamento</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {metodosPagamentoOptions.vista.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              name="metodoPagamento"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Método de Pagamento</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {metodosPagamentoOptions.prazo.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              name="dataVencimento"
-              control={form.control}
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Vencimento</FormLabel>
-                  <FormControl>
-                    <DatePicker
-                      date={field.value}
-                      onDateChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Conta Bancária */}
-      <FormField
-        name="contaBancariaId"
-        control={form.control}
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Conta de Destino (Crédito)</FormLabel>
-            <Select
-              onValueChange={field.onChange}
-              value={field.value}
-            >
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a conta..." />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                {contasBancariasOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormDescription>
-              Selecione onde o valor da venda será creditado (apenas para vendas à vista).
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      {/* Cartão de Crédito */}
-      {metodoPagamento === "Cartão de Crédito" && (
-        <div className="grid md:grid-cols-3 gap-4 items-end pt-4">
-          <FormField
-            name="taxaCartao"
-            control={form.control}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Taxa da Máquina (%)</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="Ex: 2.5"
-                    {...field}
-                    onChange={(e) =>
-                      field.onChange(parseFloat(e.target.value) || 0)
-                    }
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            name="numeroParcelas"
-            control={form.control}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nº de Parcelas</FormLabel>
-                <Select
-                  onValueChange={(v) => field.onChange(parseInt(v))}
-                  value={String(field.value)}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (
-                      <SelectItem key={p} value={String(p)}>
-                        {p}x
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Valor da Parcela</p>
-            <p className="text-lg font-bold">
-              R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Valor Final */}
-      <div className="text-right mt-4 pt-4 border-t">
-        <p className="text-sm text-muted-foreground">Valor Final da Venda</p>
-        <p className="text-2xl font-bold">
-          R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}
-        </p>
-      </div>
-    </fieldset>
-  </CardContent>
-</Card>
-
-
+                        <Card className="mb-6">
+                            <CardHeader><CardTitle>{isEditing ? 'Editar Venda' : 'Dados da Venda'}</CardTitle>{!isEditing && (<CardDescription>Selecione o cliente, a data e os produtos vendidos.</CardDescription>)}</CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <FormField name="clienteId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cliente</FormLabel><Combobox options={clientesOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um cliente" searchPlaceholder="Buscar cliente..." /></FormItem>)} />
+                                    <FormField name="data" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data da Venda</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
+                                </div>
+                                <Separator />
+                                <div className="space-y-3">
+                                    <FormLabel>Produtos Vendidos</FormLabel>
+                                    {fields.map((field, index) => (<ItemProdutoVenda key={field.id} index={index} control={form.control} remove={remove} handleProdutoChange={handleProdutoChange} produtosParaVendaOptions={produtosParaVendaOptions} />))}
+                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 1, precoUnitario: 0, produtoNome: "", custoUnitario: 0, estoqueDisponivel: 0, })}><IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto</Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader><CardTitle>Detalhes do Pagamento</CardTitle></CardHeader>
+                            <CardContent className="relative space-y-4">
+                                <fieldset disabled={isPaymentDisabled} className="space-y-4 disabled:opacity-50">
+                                    {isPaymentDisabled && (<div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded-lg"><div className="flex items-center gap-2 text-muted-foreground font-medium"><IconLock className="h-5 w-5" /><span>Selecione cliente e produtos para continuar</span></div></div>)}
+                                    <div className="grid md:grid-cols-2 gap-4 items-start">
+                                        <FormField name="condicaoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Condição</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="A_VISTA">À Vista</SelectItem><SelectItem value="A_PRAZO">A Prazo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                        {condicaoPagamento === "A_VISTA" ? (<FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.vista.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />) : (<div className="grid grid-cols-2 gap-4"><FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.prazo.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><FormField name="dataVencimento" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Vencimento</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div>)}
+                                    </div>
+                                    <FormField name="contaBancariaId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Conta de Destino (Crédito)</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl><SelectContent>{contasBancariasOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormDescription>Selecione onde o valor da venda será creditado (apenas para vendas à vista).</FormDescription><FormMessage /></FormItem>)} />
+                                    {metodoPagamento === "Cartão de Crédito" && (<div className="grid md:grid-cols-3 gap-4 items-end pt-4"><FormField name="taxaCartao" control={form.control} render={({ field }) => (<FormItem><FormLabel>Taxa da Máquina (%)</FormLabel><FormControl><Input type="number" placeholder="Ex: 2.5" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl><FormMessage /></FormItem>)} /><FormField name="numeroParcelas" control={form.control} render={({ field }) => (<FormItem><FormLabel>Nº de Parcelas</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (<SelectItem key={p} value={String(p)}>{p}x</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><div className="text-right"><p className="text-sm text-muted-foreground">Valor da Parcela</p><p className="text-lg font-bold">R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}</p></div></div>)}
+                                    <div className="text-right mt-4 pt-4 border-t"><p className="text-sm text-muted-foreground">Valor Final da Venda</p><p className="text-2xl font-bold">R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}</p></div>
+                                </fieldset>
+                            </CardContent>
+                        </Card>
                         <div className="flex justify-end pt-4 gap-2">
                             {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                            <Button type="submit" form="venda-form" size="lg" disabled={isPaymentDisabled}>
-                                {isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}
-                            </Button>
+                            <Button type="submit" form="venda-form" size="lg" disabled={isPaymentDisabled}>{isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}</Button>
                         </div>
                     </form>
                 </fieldset>
@@ -647,41 +404,18 @@ export default function VendasPage() {
         )
     );
 
-    const tableControls = (<Input placeholder="Pesquisar por cliente..." value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="max-w-full md:max-w-sm" />);
-
     return (
-  <div className="container mx-auto py-6 px-4 md:px-8">
-    <div className="grid grid-cols-1 xl:grid-cols-[2fr_3fr] gap-6 xl:gap-8 items-start">
-      <div className="space-y-6">
-        {formContent}
-      </div>
-
-      <Card className="h-full flex flex-col">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Histórico de Vendas</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-4">
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-10 w-full" />
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
-              ))}
+        <div className="container mx-auto py-6 px-4 md:px-8">
+            <div className="grid grid-cols-1 xl:grid-cols-[2fr_3fr] gap-6 xl:gap-8 items-start">
+                <div className="space-y-6">{formContent}</div>
+                <Card className="h-full flex flex-col">
+                    <CardHeader className="pb-4"><CardTitle className="text-lg">Histórico de Vendas</CardTitle></CardHeader>
+                    <CardContent className="flex-1 flex flex-col gap-4">
+                        {isLoading ? (<div className="space-y-2"><Skeleton className="h-10 w-full" />{[...Array(5)].map((_, i) => (<Skeleton key={i} className="h-10 w-full" />))}</div>)
+                        : (<GenericTable columns={columns} data={vendasEnriquecidas} filterPlaceholder="Pesquisar por cliente..." filterColumnId="clienteNome" renderSubComponent={renderSubComponent} />)}
+                    </CardContent>
+                </Card>
             </div>
-          ) : (
-            <GenericTable
-              columns={columns}
-              data={vendasEnriquecidas}
-              globalFilter={globalFilter}
-              setGlobalFilter={setGlobalFilter}
-              tableControlsComponent={tableControls}
-              renderSubComponent={renderSubComponent}
-              enableMultiRowExpansion={false}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  </div>
-);
+        </div>
+    );
 }
