@@ -79,9 +79,8 @@ export default function AccountPage() {
             await changeUserPassword(values.newPassword);
             toast.success("Senha alterada com sucesso!");
             passwordForm.reset();
-        } catch (error: any)
-        {
-            toast.error("Erro ao alterar senha.", { description: error.message });
+        } catch (error: any) {
+            toast.error("Erro ao alterar senha.", { description: "Pode ser necessário fazer logout e login novamente para realizar esta operação." });
         } finally {
             setIsSavingPassword(false);
         }

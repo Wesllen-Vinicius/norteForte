@@ -26,7 +26,6 @@ import { useDataStore } from "@/store/data.store";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Badge } from "@/components/ui/badge";
 
-// Schema para o formulário, omitindo campos gerenciados automaticamente.
 const formSchema = abateSchema.omit({ registradoPor: true, createdAt: true, id: true });
 type AbateFormValues = z.infer<typeof formSchema>;
 type AbateComDetalhes = Abate & { responsavelNome?: string, registradorRole?: string };
@@ -37,7 +36,7 @@ export default function AbatesPage() {
 
     const [abates, setAbates] = useState<Abate[]>([]);
     const [isEditing, setIsEditing] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null); // Estado para guardar o ID durante a edição
+    const [editingId, setEditingId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -129,7 +128,7 @@ export default function AbatesPage() {
         try {
             await deleteAbate(selectedId);
             toast.success("Registro removido com sucesso!");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao remover o registro.");
         } finally {
             setSelectedId(null);

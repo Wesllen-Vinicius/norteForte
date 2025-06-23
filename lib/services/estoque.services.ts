@@ -1,6 +1,6 @@
 // lib/services/estoque.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, doc, runTransaction, Timestamp, serverTimestamp } from "firebase/firestore";
+import { collection,doc, runTransaction, serverTimestamp } from "firebase/firestore";
 import { z } from "zod";
 
 // Schema para uma movimentação de estoque

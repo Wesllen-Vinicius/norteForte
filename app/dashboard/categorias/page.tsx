@@ -41,7 +41,7 @@ export default function CategoriasPage() {
         try {
             await deleteCategoria(id);
             toast.success("Categoria removida com sucesso!");
-        } catch (_error) {
+        } catch {
             toast.error("Erro ao remover a categoria.");
         }
     };
@@ -62,7 +62,7 @@ export default function CategoriasPage() {
                 toast.success("Categoria cadastrada com sucesso!");
             }
             resetForm();
-        } catch (_error) {
+        } catch {
             toast.error("Ocorreu um erro ao salvar a categoria.");
         }
     };

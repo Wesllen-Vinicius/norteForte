@@ -1,4 +1,3 @@
-// app/login/page.tsx
 "use client"
 
 import { useForm } from "react-hook-form";
@@ -6,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { IconLoader, IconMeat } from "@tabler/icons-react";
+import { IconLoader } from "@tabler/icons-react";
 
 import { loginSchema, signInWithEmail } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
@@ -36,7 +35,6 @@ export default function LoginPage() {
                 return "Login realizado com sucesso!";
             },
             error: (err) => {
-                // Aprimorando a mensagem de erro
                 if (err.code === 'auth/invalid-credential') {
                     return "Credenciais inválidas. Verifique seu e-mail e senha.";
                 }

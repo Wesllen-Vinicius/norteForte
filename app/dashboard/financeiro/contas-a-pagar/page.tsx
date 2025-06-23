@@ -42,7 +42,7 @@ export default function ContasAPagarPage() {
         try {
             await updateDoc(contaDoc, { status: "Paga" });
             toast.success("Conta marcada como paga!");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao atualizar o status da conta.");
         }
     };

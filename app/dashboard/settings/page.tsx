@@ -47,7 +47,7 @@ export default function SettingsPage() {
         try {
             await saveCompanyInfo(values);
             toast.success("Informações da empresa salvas com sucesso!");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao salvar as informações.");
         }
     };

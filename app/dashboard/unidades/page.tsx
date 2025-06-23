@@ -41,7 +41,7 @@ export default function UnidadesPage() {
         try {
             await deleteUnidade(id);
             toast.success("Unidade removida com sucesso!");
-        } catch (_error) {
+        } catch {
             toast.error("Erro ao remover a unidade.");
         }
     };
@@ -62,7 +62,7 @@ export default function UnidadesPage() {
                 toast.success("Unidade cadastrada com sucesso!");
             }
             resetForm();
-        } catch (_error) {
+        } catch {
             toast.error("Ocorreu um erro ao salvar a unidade.");
         }
     };

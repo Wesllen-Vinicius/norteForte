@@ -64,7 +64,7 @@ export default function FuncionariosPage() {
         try {
             await deleteFuncionario(id);
             toast.success("Prestador removido com sucesso!");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao remover o prestador.");
         }
     };
@@ -85,8 +85,8 @@ export default function FuncionariosPage() {
                 toast.success(`Prestador "${data.nomeCompleto}" cadastrado com sucesso!`);
             }
             resetForm();
-        } catch (error: any) {
-            toast.error("Ocorreu um erro", { description: error.message });
+        } catch {
+            toast.error("Ocorreu um erro");
         }
     };
 
