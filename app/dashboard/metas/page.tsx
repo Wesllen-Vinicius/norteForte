@@ -60,7 +60,7 @@ export default function MetasPage() {
         try {
             await deleteMeta(id);
             toast.success("Meta removida com sucesso!");
-        } catch (error) {
+        } catch (_error) {
             toast.error("Erro ao remover a meta.");
         }
     };
@@ -81,7 +81,7 @@ export default function MetasPage() {
                 toast.success("Meta cadastrada com sucesso!");
             }
             resetForm();
-        } catch (error) {
+        } catch (_error) {
             toast.error("Ocorreu um erro ao salvar a meta.");
         }
     };
