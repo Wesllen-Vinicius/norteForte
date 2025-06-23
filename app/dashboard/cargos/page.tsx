@@ -41,7 +41,7 @@ export default function CargosPage() {
     try {
       await deleteCargo(id);
       toast.success("Cargo removido com sucesso!");
-    } catch (error) {
+    } catch (_error) {
       toast.error("Erro ao remover o cargo.");
     }
   };
@@ -61,7 +61,7 @@ export default function CargosPage() {
         toast.success(`Cargo "${values.nome}" adicionado com sucesso!`);
       }
       resetForm();
-    } catch (error) {
+    } catch (_error) {
       toast.error("Ocorreu um erro ao salvar o cargo.");
     }
   };

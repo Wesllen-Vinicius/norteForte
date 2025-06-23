@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -90,7 +90,7 @@ export default function AbatesPage() {
         },
         {
             id: "actions",
-            cell: ({ row }) => {
+            cell: ({ row }: { row: Row<AbateComDetalhes> }) => {
                 const item = row.original;
                 const createdAt = item.createdAt as Timestamp | undefined;
                 const podeEditar = role === 'ADMINISTRADOR' || (item.registradoPor.uid === user?.uid && createdAt && (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()));
@@ -108,7 +108,6 @@ export default function AbatesPage() {
         },
     ];
 
-    // CORREÇÃO: A função agora armazena o ID no estado e reseta o formulário sem o campo 'id'.
     const handleEdit = (abate: AbateComDetalhes) => {
       setEditingId(abate.id!);
       setIsEditing(true);
@@ -149,7 +148,6 @@ export default function AbatesPage() {
         setEditingId(null);
     };
 
-    // CORREÇÃO: A lógica de submit agora usa o `editingId` do estado para a atualização.
     const onSubmit = async (values: AbateFormValues) => {
         if (!user || !role) return toast.error("Usuário não autenticado.");
 

@@ -81,7 +81,7 @@ export default function AccountPage() {
             passwordForm.reset();
         } catch (error: any)
         {
-            toast.error("Erro ao alterar senha.", { description: "Pode ser necessário fazer logout e login novamente para realizar esta operação." });
+            toast.error("Erro ao alterar senha.", { description: error.message });
         } finally {
             setIsSavingPassword(false);
         }
@@ -115,7 +115,7 @@ export default function AccountPage() {
                                     <AvatarImage src={photoPreview ?? undefined} />
                                     <AvatarFallback className="text-2xl">{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <FormField name="photoFile" control={profileForm.control} render={({ field: { onChange, value, ...rest } }) => (
+                                <FormField name="photoFile" control={profileForm.control} render={({ field: { onChange, ...rest } }) => (
                                     <FormItem>
                                         <FormLabel>Nova Foto de Perfil</FormLabel>
                                         <FormControl><Input type="file" accept="image/*" onChange={(e) => onChange(e.target.files)} {...rest} /></FormControl>

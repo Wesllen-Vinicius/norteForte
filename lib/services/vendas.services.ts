@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, Timestamp, onSnapshot, QuerySnapshot, DocumentData, updateDoc, query, orderBy, addDoc } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp, Timestamp, onSnapshot, QuerySnapshot, DocumentData, updateDoc, query, orderBy } from "firebase/firestore";
 import { Venda } from "@/lib/schemas";
 
 export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' | 'status'>, clienteNome: string) => {
@@ -117,7 +117,7 @@ export const updateVendaStatus = async (id: string, status: 'Paga' | 'Pendente')
 export const updateVenda = async (id: string, vendaData: Partial<Omit<Venda, 'id'>>) => {
     const vendaDocRef = doc(db, "vendas", id);
 
-    const dataToUpdate: { [key: string]: any } = { ...vendaData };
+    const dataToUpdate: { [key: string]: unknown } = { ...vendaData };
 
     if (vendaData.data) {
         dataToUpdate.data = Timestamp.fromDate(vendaData.data as Date);
