@@ -51,7 +51,7 @@ export default function FornecedoresPage() {
         try {
             await deleteFornecedor(id);
             toast.success("Fornecedor removido com sucesso!");
-        } catch (_error) {
+        } catch {
             toast.error("Erro ao remover o fornecedor.");
         }
     };
@@ -72,7 +72,7 @@ export default function FornecedoresPage() {
                 toast.success(`Fornecedor "${data.razaoSocial}" cadastrado com sucesso!`);
             }
             resetForm();
-        } catch (_error) {
+        } catch {
             toast.error("Ocorreu um erro ao salvar o fornecedor.");
         }
     };

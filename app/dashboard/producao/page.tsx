@@ -14,7 +14,7 @@ import { Timestamp } from "firebase/firestore";
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/date-picker";
@@ -134,7 +134,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
 }
 
 export default function ProducaoPage() {
-    const { producoes, funcionarios, abates, users, produtos, metas, unidades } = useDataStore();
+    const { producoes, funcionarios, abates, users, produtos} = useDataStore();
     const { user, role } = useAuthStore();
 
     const [isEditing, setIsEditing] = useState(false);
@@ -207,7 +207,7 @@ export default function ProducaoPage() {
         try {
             await deleteProducao(selectedId);
             toast.success("Registro de produção removido!");
-        } catch (e) {
+        } catch {
             toast.error("Erro ao remover registro.");
         } finally {
             setSelectedId(null);

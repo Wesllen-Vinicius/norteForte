@@ -12,7 +12,7 @@ import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input"; // Adicionado Input
+import { Input } from "@/components/ui/input";
 import { ContaAReceber } from "@/lib/schemas";
 import { updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
 import { useDataStore } from "@/store/data.store";
@@ -43,7 +43,7 @@ export default function ContasAReceberPage() {
                 await updateVendaStatus(conta.vendaId, "Paga");
             }
             toast.success("Conta marcada como recebida!");
-        } catch (error) {
+        } catch {
             toast.error("Erro ao atualizar o status da conta.");
         }
     };

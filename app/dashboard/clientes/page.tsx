@@ -45,7 +45,7 @@ export default function ClientesPage() {
         try {
             await deleteCliente(id);
             toast.success("Cliente removido com sucesso!");
-        } catch (_error) {
+        } catch {
             toast.error("Erro ao remover o cliente.");
         }
     };
@@ -66,7 +66,7 @@ export default function ClientesPage() {
                 toast.success(`Cliente "${data.nome}" cadastrado com sucesso!`);
             }
             resetForm();
-        } catch (_error) {
+        } catch {
             toast.error("Ocorreu um erro ao salvar o cliente.");
         }
     };

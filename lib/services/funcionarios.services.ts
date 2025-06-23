@@ -1,6 +1,6 @@
 // lib/services/funcionarios.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc,serverTimestamp } from "firebase/firestore";
 import { z } from "zod";
 
 export const funcionarioSchema = z.object({
