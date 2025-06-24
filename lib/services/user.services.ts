@@ -1,21 +1,10 @@
-// lib/services/user.services.ts
 import { auth, db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { updateProfile, updatePassword } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { z } from "zod";
+import { SystemUser } from "@/lib/schemas";
 
-// --- Funções de Gerenciamento de Documentos de Usuário (Firestore) ---
-
-export const userSchema = z.object({
-  uid: z.string(),
-  displayName: z.string().min(1, "O nome de exibição é obrigatório."),
-  email: z.string().email(),
-  role: z.enum(['ADMINISTRADOR', 'USUARIO']),
-  password: z.string().min(6, "A senha deve ter no mínimo 6 caracteres.").optional().or(z.literal('')),
-});
-
-export type SystemUser = z.infer<typeof userSchema>;
+// O schema que estava aqui foi removido.
 
 export const setUserDoc = async (userData: Omit<SystemUser, 'password'>) => {
   const userDocRef = doc(db, "users", userData.uid);

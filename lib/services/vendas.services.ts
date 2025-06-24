@@ -73,7 +73,6 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
         });
       }
 
-      // Atualiza o saldo da conta bancária se a venda for paga
       if (vendaData.contaBancariaId && statusVenda === 'Paga') {
         const contaRef = doc(db, "contasBancarias", vendaData.contaBancariaId);
         const contaDoc = await transaction.get(contaRef);
@@ -116,6 +115,7 @@ export const updateVendaStatus = async (id: string, status: 'Paga' | 'Pendente')
 
 export const updateVenda = async (id: string, vendaData: Partial<Omit<Venda, 'id'>>) => {
     const vendaDocRef = doc(db, "vendas", id);
+
     const dataToUpdate: { [key: string]: any } = { ...vendaData };
 
     if (vendaData.data) {

@@ -1,25 +1,12 @@
-// lib/services/clientes.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, addDoc, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where } from "firebase/firestore";
+import { Cliente } from "@/lib/schemas";
 
-export const clienteSchema = z.object({
-  id: z.string().optional(),
-  nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
-  tipoPessoa: z.enum(["fisica", "juridica"], { required_error: "Selecione o tipo de pessoa." }),
-  documento: z.string().min(11, "O CPF/CNPJ é obrigatório."),
-  telefone: z.string().min(10, "O telefone é obrigatório."),
-  email: z.string().email("O e-mail é obrigatório e deve ser válido."),
-  endereco: z.string().min(5, "O endereço é obrigatório."),
-  createdAt: z.any().optional(),
-});
-
-export type Cliente = z.infer<typeof clienteSchema>;
-
-export const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
+export const addCliente = async (cliente: Omit<Cliente, 'id' | 'createdAt' | 'status'>) => {
   try {
     const dataWithTimestamp = {
       ...cliente,
+      status: 'ativo',
       createdAt: serverTimestamp()
     };
     const docRef = await addDoc(collection(db, "clientes"), dataWithTimestamp);
@@ -31,7 +18,9 @@ export const addCliente = async (cliente: Omit<Cliente, 'id'>) => {
 };
 
 export const subscribeToClientes = (callback: (clientes: Cliente[]) => void) => {
-  const unsubscribe = onSnapshot(collection(db, "clientes"), (querySnapshot: QuerySnapshot<DocumentData>) => {
+  const q = query(collection(db, "clientes"), where("status", "==", "ativo"));
+
+  const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const clientes: Cliente[] = [];
     querySnapshot.forEach((doc) => {
       clientes.push({ id: doc.id, ...doc.data() as Omit<Cliente, 'id'> });
@@ -41,12 +30,12 @@ export const subscribeToClientes = (callback: (clientes: Cliente[]) => void) => 
   return unsubscribe;
 };
 
-export const updateCliente = async (id: string, cliente: Partial<Omit<Cliente, 'id'>>) => {
+export const updateCliente = async (id: string, cliente: Partial<Omit<Cliente, 'id' | 'createdAt' | 'status'>>) => {
   const clienteDoc = doc(db, "clientes", id);
   await updateDoc(clienteDoc, cliente);
 };
 
-export const deleteCliente = async (id: string) => {
-  const clienteDoc = doc(db, "clientes", id);
-  await deleteDoc(clienteDoc);
-};
+export const setClienteStatus = async (id: string, status: 'ativo' | 'inativo') => {
+    const clienteDoc = doc(db, "clientes", id);
+    await updateDoc(clienteDoc, { status });
+}

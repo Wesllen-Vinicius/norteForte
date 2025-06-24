@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
 import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
@@ -26,25 +27,18 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
-import { registrarProducao, Producao, updateProducao, deleteProducao } from "@/lib/services/producao.services";
+import { Producao, producaoSchema } from "@/lib/schemas";
+import { registrarProducao, updateProducao, setProducaoStatus } from "@/lib/services/producao.services";
 
-// CORREÇÃO: Schema específico para o formulário, evitando conflitos de tipo com o ZodResolver.
-const formItemSchema = z.object({
-    produtoId: z.string().min(1, "Selecione um produto."),
-    produtoNome: z.string(),
-    quantidade: z.coerce.number().min(0, "A quantidade deve ser um número positivo."),
-    perda: z.coerce.number().min(0, "A perda não pode ser negativa."),
+
+const formSchema = producaoSchema.pick({
+    data: true,
+    responsavelId: true,
+    abateId: true,
+    lote: true,
+    descricao: true,
+    produtos: true,
 });
-
-const formSchema = z.object({
-    data: z.date(),
-    responsavelId: z.string().min(1, "Selecione um responsável."),
-    abateId: z.string().min(1, "Selecione um abate para vincular."),
-    lote: z.string().optional(),
-    descricao: z.string().optional(),
-    produtos: z.array(formItemSchema).min(1, "Adicione pelo menos um produto à produção."),
-});
-
 
 type ProducaoFormValues = z.infer<typeof formSchema>;
 type ProducaoComDetalhes = Producao & { responsavelNome?: string, registradorRole?: string };
@@ -82,7 +76,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
     }, [produtoId, animaisValidos, metas, produtos, unidades]);
 
     useEffect(() => {
-        const perdaCalculada = metaEsperada > 0 ? metaEsperada - (quantidadeProduzida || 0) : 0;
+        const perdaCalculada = metaEsperada > 0 ? (metaEsperada - (quantidadeProduzida || 0)) : 0;
         setValue(`produtos.${index}.perda`, parseFloat(Math.max(0, perdaCalculada).toFixed(2)));
     }, [quantidadeProduzida, metaEsperada, index, setValue]);
 
@@ -107,7 +101,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
                             </AlertDescription>
                         </Alert>
                     )}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                         <FormItem>
                             <FormLabel className="text-xs">Meta Esperada ({unidade})</FormLabel>
                             <Input value={metaEsperada.toFixed(2)} readOnly className="bg-muted-foreground/20" />
@@ -135,7 +129,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
 }
 
 export default function ProducaoPage() {
-    const { producoes, funcionarios, abates, users, produtos } = useDataStore();
+    const { producoes, funcionarios, abates, users, produtos, compras } = useDataStore();
     const { user, role } = useAuthStore();
 
     const [isEditing, setIsEditing] = useState(false);
@@ -165,10 +159,12 @@ export default function ProducaoPage() {
         return () => clearTimeout(timer);
     }, []);
 
-    const abateOptions = useMemo(() => (abates || []).map(a => ({
-        label: `Data: ${format(a.data, "dd/MM/yy")} | Total: ${a.total} | ID: ...${a.id?.slice(-4)}`,
-        value: a.id!
-    })), [abates]);
+    const abateOptions = useMemo(() => (abates || []).map(a => {
+        const compraRef = compras.find(c => c.id === a.compraId);
+        const label = `Data: ${format(a.data, "dd/MM/yy")} | Total: ${a.total} | Ref NF: ${compraRef?.notaFiscal || 'N/A'}`;
+        return { label, value: a.id! };
+    }), [abates, compras]);
+
     const funcionarioOptions = useMemo(() => (funcionarios || []).map(f => ({ label: f.nomeCompleto, value: f.id! })), [funcionarios]);
 
     const filteredAndEnrichedProducoes = useMemo(() => {
@@ -200,15 +196,15 @@ export default function ProducaoPage() {
         });
     };
 
-    const handleDeleteClick = (id: string) => { setSelectedId(id); setDialogOpen(true); };
+    const handleInactivateClick = (id: string) => { setSelectedId(id); setDialogOpen(true); };
 
-    const confirmDelete = async () => {
+    const confirmInactivation = async () => {
         if (!selectedId) return;
         try {
-            await deleteProducao(selectedId);
-            toast.success("Registro de produção removido!");
+            await setProducaoStatus(selectedId, 'inativo');
+            toast.success("Registro de produção inativado!");
         } catch {
-            toast.error("Erro ao remover registro.");
+            toast.error("Erro ao inativar registro.");
         } finally {
             setSelectedId(null);
             setDialogOpen(false);
@@ -216,12 +212,12 @@ export default function ProducaoPage() {
     };
 
     const onSubmit = async (values: ProducaoFormValues) => {
-        if (!user) {
+        if (!user || !role) {
             toast.error("Você precisa estar logado para realizar esta ação.");
             return;
         }
 
-        const dataParaSalvar = {
+        const finalValues = {
             ...values,
             produtos: values.produtos.map(p => ({
                 ...p,
@@ -231,17 +227,15 @@ export default function ProducaoPage() {
 
         try {
             if (isEditing && editingId) {
-                await updateProducao(editingId, dataParaSalvar);
+                await updateProducao(editingId, finalValues);
                 toast.success("Produção atualizada com sucesso!");
             } else {
-                const finalData = { ...dataParaSalvar, registradoPor: { uid: user.uid, nome: user.displayName || "Usuário" }};
-                await registrarProducao(finalData);
+                await registrarProducao(finalValues, { uid: user.uid, nome: user.displayName || "Usuário" });
                 toast.success("Lote de produção registrado com sucesso!");
             }
             resetForm();
-        } catch (error: unknown) {
-           const errorMessage = error instanceof Error ? error.message : "Falha ao registrar produção";
-           toast.error(errorMessage);
+        } catch (error: any) {
+           toast.error(error.message || "Falha ao registrar produção");
         }
     };
 
@@ -301,7 +295,7 @@ export default function ProducaoPage() {
             return (
                 <div className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
-                    {podeExcluir && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>}
+                    {podeExcluir && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>}
                 </div>
             )
         }},
@@ -358,7 +352,7 @@ export default function ProducaoPage() {
                                 animaisValidos={animaisValidosParaProducao}
                             />
                         ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 0, produtoNome: "", perda: 0 })}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", produtoNome: "", quantidade: 0, perda: 0 })}>
                             <IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto
                         </Button>
                     </div>
@@ -370,7 +364,7 @@ export default function ProducaoPage() {
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
-            <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmDelete} title="Confirmar Exclusão" description="Esta ação é irreversível e removerá o lote de produção permanentemente."/>
+            <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmInactivation} title="Confirmar Inativação" description="Esta ação é irreversível e irá inativar o lote de produção."/>
             <CrudLayout
                 formTitle={isEditing ? "Editar Produção" : "Registrar Produção"}
                 formContent={formContent}

@@ -15,7 +15,8 @@ import { GenericTable } from "@/components/generic-table";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { addCargo, Cargo, deleteCargo, updateCargo, cargoSchema } from "@/lib/services/cargos.services";
+import { Cargo, cargoSchema } from "@/lib/schemas";
+import { addCargo, setCargoStatus, updateCargo } from "@/lib/services/cargos.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 
@@ -36,13 +37,13 @@ export default function CargosPage() {
     setIsEditing(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if(!confirm("Tem certeza que deseja remover este cargo?")) return;
+  const handleInactivate = async (id: string) => {
+    if(!confirm("Tem certeza que deseja inativar este cargo?")) return;
     try {
-      await deleteCargo(id);
-      toast.success("Cargo removido com sucesso!");
+      await setCargoStatus(id, 'inativo');
+      toast.success("Cargo inativado com sucesso!");
     } catch {
-      toast.error("Erro ao remover o cargo.");
+      toast.error("Erro ao inativar o cargo.");
     }
   };
 
@@ -84,7 +85,7 @@ export default function CargosPage() {
               <IconPencil className="h-4 w-4" />
             </Button>
             {role === 'ADMINISTRADOR' && (
-                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(item.id!)}>
+                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
                     <IconTrash className="h-4 w-4" />
                 </Button>
             )}

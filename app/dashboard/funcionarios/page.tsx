@@ -1,9 +1,8 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -18,9 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { MaskedInput } from "@/components/ui/masked-input";
-import { Funcionario, funcionarioSchema, addFuncionario, updateFuncionario, deleteFuncionario } from "@/lib/services/funcionarios.services";
+import { Funcionario, funcionarioSchema } from "@/lib/schemas";
+import { addFuncionario, updateFuncionario, setFuncionarioStatus } from "@/lib/services/funcionarios.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import z from "zod";
 
 type FuncionarioFormValues = z.infer<typeof funcionarioSchema>;
 
@@ -59,13 +60,13 @@ export default function FuncionariosPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover este prestador?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar este prestador?")) return;
         try {
-            await deleteFuncionario(id);
-            toast.success("Prestador removido com sucesso!");
+            await setFuncionarioStatus(id, 'inativo');
+            toast.success("Prestador inativado com sucesso!");
         } catch {
-            toast.error("Erro ao remover o prestador.");
+            toast.error("Erro ao inativar o prestador.");
         }
     };
 
@@ -108,7 +109,7 @@ export default function FuncionariosPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(prestador.id!)}>
+                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(prestador.id!)}>
                                <IconTrash className="h-4 w-4" />
                            </Button>
                         )}

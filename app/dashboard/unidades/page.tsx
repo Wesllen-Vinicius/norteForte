@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -15,9 +14,11 @@ import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Unidade, unidadeSchema, addUnidade, updateUnidade, deleteUnidade } from "@/lib/services/unidades.services";
+import { Unidade, unidadeSchema } from "@/lib/schemas";
+import { addUnidade, updateUnidade, setUnidadeStatus } from "@/lib/services/unidades.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import z from "zod";
 
 type UnidadeFormValues = z.infer<typeof unidadeSchema>;
 
@@ -36,13 +37,13 @@ export default function UnidadesPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover esta unidade?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar esta unidade?")) return;
         try {
-            await deleteUnidade(id);
-            toast.success("Unidade removida com sucesso!");
+            await setUnidadeStatus(id, 'inativo');
+            toast.success("Unidade inativada com sucesso!");
         } catch {
-            toast.error("Erro ao remover a unidade.");
+            toast.error("Erro ao inativar a unidade.");
         }
     };
 
@@ -83,7 +84,7 @@ export default function UnidadesPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id!)}>
                                 <IconTrash className="h-4 w-4" />
                             </Button>
                         )}

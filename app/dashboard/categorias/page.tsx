@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -15,9 +14,11 @@ import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Categoria, categoriaSchema, addCategoria, updateCategoria, deleteCategoria } from "@/lib/services/categorias.services";
+import { Categoria, categoriaSchema } from "@/lib/schemas";
+import { addCategoria, updateCategoria, setCategoriaStatus } from "@/lib/services/categorias.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import z from "zod";
 
 type CategoriaFormValues = z.infer<typeof categoriaSchema>;
 
@@ -36,13 +37,13 @@ export default function CategoriasPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover esta categoria?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar esta categoria?")) return;
         try {
-            await deleteCategoria(id);
-            toast.success("Categoria removida com sucesso!");
+            await setCategoriaStatus(id, 'inativo');
+            toast.success("Categoria inativada com sucesso!");
         } catch {
-            toast.error("Erro ao remover a categoria.");
+            toast.error("Erro ao inativar a categoria.");
         }
     };
 
@@ -82,7 +83,7 @@ export default function CategoriasPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(row.original.id!)}>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id!)}>
                                 <IconTrash className="h-4 w-4" />
                             </Button>
                         )}

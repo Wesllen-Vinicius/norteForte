@@ -1,30 +1,7 @@
-// Em lib/services/compras.services.ts
-
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, doc, DocumentData, onSnapshot, orderBy, query, QuerySnapshot, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
+import { Compra } from "@/lib/schemas";
 
-const itemCompradoSchema = z.object({
-  produtoId: z.string().min(1, "Selecione um produto."),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
-  custoUnitario: z.coerce.number().min(0, "O custo não pode ser negativo."),
-});
-
-export const compraSchema = z.object({
-  id: z.string().optional(),
-  fornecedorId: z.string().min(1, "Selecione um fornecedor."),
-  notaFiscal: z.string().min(1, "O número da nota fiscal é obrigatório."),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  itens: z.array(itemCompradoSchema).min(1, "Adicione pelo menos um item."),
-  condicaoPagamento: z.string().min(1, "A condição de pagamento é obrigatória."),
-  valorTotal: z.coerce.number(),
-  createdAt: z.any().optional(),
-  // CORREÇÃO: Adicione a linha abaixo
-  contaBancariaId: z.string().optional(),
-});
-
-export type Compra = z.infer<typeof compraSchema>;
 
 export const registrarCompra = async (compraData: Omit<Compra, 'id' | 'createdAt'>) => {
   try {
@@ -73,4 +50,20 @@ export const registrarCompra = async (compraData: Omit<Compra, 'id' | 'createdAt
     console.error("Erro ao registrar compra: ", error);
     throw error;
   }
+};
+
+export const subscribeToCompras = (callback: (compras: Compra[]) => void) => {
+  const q = query(collection(db, "compras"), orderBy("data", "desc"));
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const compras: Compra[] = [];
+    querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        compras.push({
+            ...data,
+            id: doc.id,
+            data: (data.data as Timestamp).toDate(),
+        } as Compra);
+    });
+    callback(compras);
+  });
 };

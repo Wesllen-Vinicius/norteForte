@@ -7,7 +7,10 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { IconLoader } from "@tabler/icons-react";
 
-import { loginSchema, signInWithEmail } from "@/lib/services/auth.services";
+// CORREÇÃO AQUI: Importações separadas
+import { loginSchema, LoginValues } from "@/lib/schemas";
+import { signInWithEmail } from "@/lib/services/auth.services";
+
 import { GenericForm } from "@/components/generic-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -15,18 +18,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LoginGuard } from "@/components/login-guard";
 
-type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const form = useForm<LoginFormValues>({
+    const form = useForm<LoginValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },
     });
 
     const { isSubmitting } = form.formState;
 
-    const onSubmit = async (values: LoginFormValues) => {
+    const onSubmit = async (values: LoginValues) => {
         const promise = signInWithEmail(values);
         toast.promise(promise, {
             loading: "Autenticando...",

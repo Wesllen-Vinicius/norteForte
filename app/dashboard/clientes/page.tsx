@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -17,9 +16,11 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MaskedInput } from "@/components/ui/masked-input";
-import { Cliente, clienteSchema, addCliente, updateCliente, deleteCliente } from "@/lib/services/clientes.services";
+import { Cliente, clienteSchema } from "@/lib/schemas";
+import { addCliente, updateCliente, setClienteStatus } from "@/lib/services/clientes.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import z from "zod";
 
 type ClienteFormValues = z.infer<typeof clienteSchema>;
 
@@ -40,13 +41,13 @@ export default function ClientesPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover este cliente?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar este cliente?")) return;
         try {
-            await deleteCliente(id);
-            toast.success("Cliente removido com sucesso!");
+            await setClienteStatus(id, 'inativo');
+            toast.success("Cliente inativado com sucesso!");
         } catch {
-            toast.error("Erro ao remover o cliente.");
+            toast.error("Erro ao inativar o cliente.");
         }
     };
 
@@ -89,7 +90,7 @@ export default function ClientesPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(item.id!)}>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
                                 <IconTrash className="h-4 w-4" />
                             </Button>
                         )}

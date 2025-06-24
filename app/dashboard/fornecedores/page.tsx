@@ -1,10 +1,8 @@
-// app/dashboard/fornecedores/page.tsx
 "use client"
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
@@ -16,10 +14,12 @@ import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Fornecedor, fornecedorSchema, addFornecedor, updateFornecedor, deleteFornecedor } from "@/lib/services/fornecedores.services";
+import { Fornecedor, fornecedorSchema } from "@/lib/schemas";
+import { addFornecedor, updateFornecedor, setFornecedorStatus } from "@/lib/services/fornecedores.services";
 import { Separator } from "@/components/ui/separator";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import z from "zod";
 
 type FornecedorFormValues = z.infer<typeof fornecedorSchema>;
 
@@ -46,13 +46,13 @@ export default function FornecedoresPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja remover este fornecedor?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar este fornecedor?")) return;
         try {
-            await deleteFornecedor(id);
-            toast.success("Fornecedor removido com sucesso!");
+            await setFornecedorStatus(id, 'inativo');
+            toast.success("Fornecedor inativado com sucesso!");
         } catch {
-            toast.error("Erro ao remover o fornecedor.");
+            toast.error("Erro ao inativar o fornecedor.");
         }
     };
 
@@ -94,7 +94,7 @@ export default function FornecedoresPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(item.id!)}>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
                                 <IconTrash className="h-4 w-4" />
                             </Button>
                         )}

@@ -7,9 +7,11 @@ import { z } from "zod";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
 import { Timestamp, Unsubscribe } from "firebase/firestore";
 import { DateRange } from "react-day-picker";
+import Link from "next/link";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -20,18 +22,29 @@ import { DatePicker } from "@/components/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { Combobox } from "@/components/ui/combobox";
-import { Abate, abateSchema, addAbate, updateAbate, deleteAbate, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
-import { useAuthStore } from "@/store/auth.store";
-import { useDataStore } from "@/store/data.store";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const formSchema = abateSchema.omit({ registradoPor: true, createdAt: true, id: true });
+import { Abate, abateSchema } from "@/lib/schemas";
+import { addAbate, updateAbate, setAbateStatus, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
+import { useAuthStore } from "@/store/auth.store";
+import { useDataStore } from "@/store/data.store";
+
+// O formSchema agora representa apenas os campos do formulário
+const formSchema = abateSchema.pick({
+    data: true,
+    total: true,
+    condenado: true,
+    responsavelId: true,
+    compraId: true,
+});
+
 type AbateFormValues = z.infer<typeof formSchema>;
-type AbateComDetalhes = Abate & { responsavelNome?: string, registradorRole?: string };
+type AbateComDetalhes = Abate & { responsavelNome?: string; registradorRole?: string; };
 
 export default function AbatesPage() {
-    const { funcionarios, users } = useDataStore();
+    const { funcionarios, users, compras } = useDataStore();
     const { user, role } = useAuthStore();
 
     const [abates, setAbates] = useState<Abate[]>([]);
@@ -44,8 +57,19 @@ export default function AbatesPage() {
 
     const form = useForm<AbateFormValues>({
         resolver: zodResolver(formSchema),
-        defaultValues: { data: new Date(), total: 0, condenado: 0, responsavelId: "" }
+        defaultValues: { data: new Date(), total: 0, condenado: 0, responsavelId: "", compraId: "" }
     });
+
+    const dependenciasFaltantes = useMemo(() => {
+        const faltantes = [];
+        if (!funcionarios || funcionarios.length === 0) {
+            faltantes.push({ nome: "Prestadores", link: "/dashboard/funcionarios" });
+        }
+        if (!compras || compras.length === 0) {
+            faltantes.push({ nome: "Compras de Matéria-Prima", link: "/dashboard/compras" });
+        }
+        return faltantes;
+    }, [funcionarios, compras]);
 
     useEffect(() => {
         setIsLoading(true);
@@ -60,6 +84,15 @@ export default function AbatesPage() {
     const funcionarioOptions = useMemo(() =>
         funcionarios.map(f => ({ label: f.nomeCompleto, value: f.id! })),
     [funcionarios]);
+
+    const compraOptions = useMemo(() =>
+        compras
+            .filter(c => c.id)
+            .map(c => ({
+                label: `NF: ${c.notaFiscal} - Data: ${format(c.data as Date, "dd/MM/yyyy")}`,
+                value: c.id!
+            })),
+    [compras]);
 
     const abatesEnriquecidos = useMemo(() => {
         return abates.map(abate => {
@@ -76,16 +109,14 @@ export default function AbatesPage() {
 
     const columns: ColumnDef<AbateComDetalhes>[] = [
         { accessorKey: "data", header: "Data", cell: ({ row }) => format(row.original.data as Date, "dd/MM/yyyy") },
+        { header: "Ref. Compra", cell: ({ row }) => {
+            const compra = compras.find(c => c.id === row.original.compraId);
+            return compra ? `NF ${compra.notaFiscal}` : 'N/A';
+        }},
         { accessorKey: "total", header: "Total" },
         { accessorKey: "condenado", header: "Condenado" },
         { accessorKey: "responsavelNome", header: "Responsável" },
         { header: "Registrado Por", accessorKey: "registradoPor.nome" },
-        { header: "Cargo do Registrador", accessorKey: "registradorRole", cell: ({ row }) => (
-            <Badge variant={row.original.registradorRole === 'ADMINISTRADOR' ? 'default' : 'secondary'}>
-                {row.original.registradorRole || 'N/A'}
-            </Badge>
-          )
-        },
         {
             id: "actions",
             cell: ({ row }: { row: Row<AbateComDetalhes> }) => {
@@ -98,7 +129,7 @@ export default function AbatesPage() {
                     <div className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
                         {podeExcluir && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDeleteClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>
                         )}
                     </div>
                 );
@@ -114,21 +145,22 @@ export default function AbatesPage() {
           total: abate.total,
           condenado: abate.condenado,
           responsavelId: abate.responsavelId,
+          compraId: abate.compraId,
       });
     };
 
-    const handleDeleteClick = (id: string) => {
+    const handleInactivateClick = (id: string) => {
         setSelectedId(id);
         setDialogOpen(true);
     };
 
-    const confirmDelete = async () => {
+    const confirmInactivation = async () => {
         if (!selectedId) return;
         try {
-            await deleteAbate(selectedId);
-            toast.success("Registro removido com sucesso!");
+            await setAbateStatus(selectedId, 'inativo');
+            toast.success("Registro de abate inativado com sucesso!");
         } catch {
-            toast.error("Erro ao remover o registro.");
+            toast.error("Erro ao inativar o registro.");
         } finally {
             setSelectedId(null);
             setDialogOpen(false);
@@ -136,33 +168,23 @@ export default function AbatesPage() {
     };
 
     const resetForm = () => {
-        form.reset({
-            data: new Date(),
-            total: 0,
-            condenado: 0,
-            responsavelId: "",
-        });
+        form.reset({ data: new Date(), total: 0, condenado: 0, responsavelId: "", compraId: "" });
         setIsEditing(false);
         setEditingId(null);
     };
 
     const onSubmit = async (values: AbateFormValues) => {
-        if (!user || !role) return toast.error("Usuário não autenticado.");
+        if (!user || !role) {
+            toast.error("Usuário ou permissão não identificados. Tente fazer login novamente.");
+            return;
+        }
 
         try {
             if (isEditing && editingId) {
                 await updateAbate(editingId, values);
                 toast.success("Registro de abate atualizado com sucesso!");
             } else {
-                const dadosCompletos = {
-                    ...values,
-                    registradoPor: {
-                        uid: user.uid,
-                        nome: user.displayName || "Usuário",
-                        role: role
-                    }
-                };
-                await addAbate(dadosCompletos);
+                await addAbate(values, { uid: user.uid, nome: user.displayName || "Usuário", role: role });
                 toast.success("Novo abate registrado com sucesso!");
             }
             resetForm();
@@ -172,49 +194,67 @@ export default function AbatesPage() {
     };
 
     const formContent = (
-      <GenericForm schema={formSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
-          <div className="space-y-4">
-              <FormField name="data" control={form.control} render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <div className="grid md:grid-cols-2 gap-4">
-                  <FormField name="total" control={form.control} render={({ field }) => (
-                      <FormItem><FormLabel>Abate Total (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField name="condenado" control={form.control} render={({ field }) => (
-                      <FormItem><FormLabel>Condenado (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
-                  )} />
-              </div>
-               <FormField name="responsavelId" control={form.control} render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Responsável pelo abate</FormLabel>
-                    <Combobox options={funcionarioOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." />
+      dependenciasFaltantes.length > 0 && !isEditing ? (
+        <Alert variant="destructive">
+            <IconAlertTriangle className="h-4 w-4" />
+            <AlertTitle>Cadastro de pré-requisitos necessário</AlertTitle>
+            <AlertDescription>
+                Para registrar um abate, você precisa primeiro cadastrar:
+                <ul className="list-disc pl-5 mt-2">
+                    {dependenciasFaltantes.map(dep => (
+                        <li key={dep.nome}>
+                            <Button variant="link" asChild className="p-0 h-auto font-bold"><Link href={dep.link}>{dep.nome}</Link></Button>
+                        </li>
+                    ))}
+                </ul>
+            </AlertDescription>
+        </Alert>
+      ) : (
+        <GenericForm schema={formSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
+            <div className="space-y-4">
+                <FormField name="compraId" control={form.control} render={({ field }) => (
+                  <FormItem className="flex flex-col"><FormLabel>Vincular Compra de Origem</FormLabel>
+                    <Combobox options={compraOptions} value={field.value} onChange={field.onChange} placeholder="Selecione uma compra..." searchPlaceholder="Buscar por NF ou data..." />
                   <FormMessage /></FormItem>
                 )} />
-          </div>
-          <div className="flex justify-end gap-2 pt-6">
-              {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-              <Button type="submit" form="abate-form">{isEditing ? "Salvar" : "Registrar"}</Button>
-          </div>
-      </GenericForm>
+                <FormField name="data" control={form.control} render={({ field }) => (
+                    <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
+                )} />
+                <div className="grid md:grid-cols-2 gap-4">
+                    <FormField name="total" control={form.control} render={({ field }) => (
+                        <FormItem><FormLabel>Abate Total (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField name="condenado" control={form.control} render={({ field }) => (
+                        <FormItem><FormLabel>Condenado (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                </div>
+                 <FormField name="responsavelId" control={form.control} render={({ field }) => (
+                    <FormItem className="flex flex-col"><FormLabel>Responsável pelo abate</FormLabel>
+                      <Combobox options={funcionarioOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." />
+                    <FormMessage /></FormItem>
+                  )} />
+            </div>
+            <div className="flex justify-end gap-2 pt-6">
+                {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
+                <Button type="submit" form="abate-form">{isEditing ? "Salvar" : "Registrar"}</Button>
+            </div>
+        </GenericForm>
+      )
     );
 
-    // CORREÇÃO: Os controles agora são passados para o GenericTable
-    // e não precisam ser declarados separadamente
     const tableContent = (
         <GenericTable
             columns={columns}
             data={abatesEnriquecidos}
             filterPlaceholder="Pesquisar por responsável..."
             filterColumnId="responsavelNome"
-            tableControlsComponent={
-                <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-            }
+            tableControlsComponent={<DateRangePicker date={dateRange} onDateChange={setDateRange} />}
         />
     );
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 space-y-8">
-             <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmDelete} title="Você tem certeza?" description="Esta ação não pode ser desfeita. O registro será removido permanentemente." />
+             <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmInactivation} title="Você tem certeza?" description="Esta ação não pode ser desfeita. O registro será inativado." />
             <CrudLayout
                 formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
                 formContent={formContent}

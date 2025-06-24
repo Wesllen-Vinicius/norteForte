@@ -1,19 +1,38 @@
 import { create } from 'zustand';
-import { subscribeToClientes, Cliente } from '@/lib/services/clientes.services';
-import { subscribeToProdutos, Produto } from '@/lib/services/produtos.services';
-import { subscribeToFuncionarios, Funcionario } from '@/lib/services/funcionarios.services';
-import { subscribeToCargos, Cargo } from '@/lib/services/cargos.services';
-import { Unidade, subscribeToUnidades } from '@/lib/services/unidades.services';
-import { Categoria, subscribeToCategorias } from '@/lib/services/categorias.services';
-import { Fornecedor, subscribeToFornecedores } from '@/lib/services/fornecedores.services';
-import { Abate, subscribeToAbates } from '@/lib/services/abates.services';
-import { Meta, subscribeToMetas } from '@/lib/services/metas.services';
-import { SystemUser, subscribeToUsers } from '@/lib/services/user.services';
-import { Producao, subscribeToProducoes } from '@/lib/services/producao.services';
-import { Venda, ContaBancaria } from '@/lib/schemas';
-import { subscribeToVendas } from '@/lib/services/vendas.services';
-import { subscribeToContasBancarias } from '@/lib/services/contasBancarias.services';
 
+// Importa todos os tipos e schemas do local centralizado
+import {
+    Cliente,
+    Produto,
+    Funcionario,
+    Cargo,
+    Unidade,
+    Categoria,
+    Fornecedor,
+    Abate,
+    Producao,
+    Venda,
+    Compra,
+    Meta,
+    SystemUser,
+    ContaBancaria
+} from '@/lib/schemas';
+
+// Importa apenas as funções de seus respectivos serviços
+import { subscribeToClientes } from '@/lib/services/clientes.services';
+import { subscribeToProdutos } from '@/lib/services/produtos.services';
+import { subscribeToFuncionarios } from '@/lib/services/funcionarios.services';
+import { subscribeToCargos } from '@/lib/services/cargos.services';
+import { subscribeToUnidades } from '@/lib/services/unidades.services';
+import { subscribeToCategorias } from '@/lib/services/categorias.services';
+import { subscribeToFornecedores } from '@/lib/services/fornecedores.services';
+import { subscribeToAbatesByDateRange } from '@/lib/services/abates.services';
+import { subscribeToProducoes } from '@/lib/services/producao.services';
+import { subscribeToVendas } from '@/lib/services/vendas.services';
+import { subscribeToCompras } from '@/lib/services/compras.services';
+import { subscribeToMetas } from '@/lib/services/metas.services';
+import { subscribeToUsers } from '@/lib/services/user.services';
+import { subscribeToContasBancarias } from '@/lib/services/contasBancarias.services';
 
 interface DataState {
   clientes: Cliente[];
@@ -26,6 +45,7 @@ interface DataState {
   abates: Abate[];
   producoes: Producao[];
   vendas: Venda[];
+  compras: Compra[];
   metas: Meta[];
   users: SystemUser[];
   contasBancarias: ContaBancaria[];
@@ -44,6 +64,7 @@ export const useDataStore = create<DataState>((set, get) => ({
   abates: [],
   producoes: [],
   vendas: [],
+  compras: [],
   metas: [],
   users: [],
   contasBancarias: [],
@@ -54,19 +75,20 @@ export const useDataStore = create<DataState>((set, get) => ({
 
     console.log("Inicializando todos os listeners de dados globais...");
 
-    subscribeToClientes((data) => set({ clientes: data }));
-    subscribeToProdutos((data) => set({ produtos: data }));
-    subscribeToFuncionarios((data) => set({ funcionarios: data }));
-    subscribeToCargos((data) => set({ cargos: data }));
-    subscribeToUnidades((data) => set({ unidades: data }));
-    subscribeToCategorias((data) => set({ categorias: data }));
-    subscribeToFornecedores((data) => set({ fornecedores: data }));
-    subscribeToAbates((data) => set({ abates: data }));
-    subscribeToProducoes((data) => set({ producoes: data }));
-    subscribeToVendas((data) => set({ vendas: data }));
-    subscribeToMetas((data) => set({ metas: data }));
-    subscribeToUsers((data) => set({ users: data }));
-    subscribeToContasBancarias((data) => set({ contasBancarias: data }));
+    subscribeToClientes((data: Cliente[]) => set({ clientes: data }));
+    subscribeToProdutos((data: Produto[]) => set({ produtos: data }));
+    subscribeToFuncionarios((data: Funcionario[]) => set({ funcionarios: data }));
+    subscribeToCargos((data: Cargo[]) => set({ cargos: data }));
+    subscribeToUnidades((data: Unidade[]) => set({ unidades: data }));
+    subscribeToCategorias((data: Categoria[]) => set({ categorias: data }));
+    subscribeToFornecedores((data: Fornecedor[]) => set({ fornecedores: data }));
+    subscribeToAbatesByDateRange(undefined, (data: Abate[]) => set({ abates: data }));
+    subscribeToProducoes((data: Producao[]) => set({ producoes: data }));
+    subscribeToVendas((data: Venda[]) => set({ vendas: data }));
+    subscribeToCompras((data: Compra[]) => set({ compras: data }));
+    subscribeToMetas((data: Meta[]) => set({ metas: data }));
+    subscribeToUsers((data: SystemUser[]) => set({ users: data }));
+    subscribeToContasBancarias((data: ContaBancaria[]) => set({ contasBancarias: data }));
 
     set({ isInitialized: true });
   },

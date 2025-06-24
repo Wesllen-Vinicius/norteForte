@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { IconPencil, IconTrash } from "@tabler/icons-react";
 import {
   fetchBancos,
   Agencia,
@@ -24,12 +25,12 @@ import { contaBancariaSchema, ContaBancaria } from "@/lib/schemas";
 import {
   addContaBancaria,
   updateContaBancaria,
-  deleteContaBancaria,
+  setContaBancariaStatus,
 } from "@/lib/services/contasBancarias.services";
 import { GenericTable } from "@/components/generic-table";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import z from "zod";
+import { z } from "zod";
 
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -51,7 +52,6 @@ export default function ContasBancariasPage() {
   const [bancosList, setBancosList] = useState<Banco[]>([]);
   const [agenciasList, setAgenciasList] = useState<Agencia[]>([]);
 
-  // CORREÇÃO: Definindo valores padrão completos e corretos
   const form = useForm<FormValues>({
     resolver: zodResolver(contaBancariaSchema),
     defaultValues: {
@@ -93,7 +93,6 @@ export default function ContasBancariasPage() {
   const onSubmit = async (values: FormValues) => {
     if (!user) return toast.error("Usuário não autenticado.");
 
-    // Garantindo que saldoInicial seja um número
     const payload = {
       ...values,
       saldoInicial: values.saldoInicial || 0,
@@ -133,14 +132,14 @@ export default function ContasBancariasPage() {
     if(data.agencia) form.setValue("agencia", data.agencia);
   };
 
-  const handleDelete = async (id: string | undefined) => {
+  const handleInactivate = async (id: string | undefined) => {
     if(!id) return;
-    if (!confirm("Confirma exclusão?")) return;
+    if (!confirm("Tem certeza que deseja inativar esta conta? Contas inativadas não poderão ser usadas em novas transações.")) return;
     try {
-      await deleteContaBancaria(id);
-      toast.success("Conta deletada!");
+      await setContaBancariaStatus(id, 'inativa');
+      toast.success("Conta inativada!");
     } catch {
-      toast.error("Erro ao deletar.");
+      toast.error("Erro ao inativar conta.");
     }
   };
 
@@ -160,18 +159,19 @@ export default function ContasBancariasPage() {
       cell: ({ row }) => (
         <div className="flex gap-2 justify-end">
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={() => handleEdit(row.original)}
           >
-            Editar
+            <IconPencil className="h-4 w-4"/>
           </Button>
           <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => handleDelete(row.original.id)}
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => handleInactivate(row.original.id)}
           >
-            Excluir
+            <IconTrash className="h-4 w-4" />
           </Button>
         </div>
       ),
@@ -183,7 +183,7 @@ export default function ContasBancariasPage() {
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-4 max-w-lg"
+          className="space-y-4"
           noValidate
         >
           <FormField
@@ -255,7 +255,7 @@ export default function ContasBancariasPage() {
             )}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-4">
             <FormField
               name="agencia"
               control={form.control}

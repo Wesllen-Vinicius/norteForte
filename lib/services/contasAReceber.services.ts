@@ -1,19 +1,6 @@
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData } from "firebase/firestore";
-import { z } from "zod";
-
-export const contaAReceberSchema = z.object({
-  id: z.string(),
-  vendaId: z.string(),
-  clienteId: z.string(),
-  clienteNome: z.string(),
-  valor: z.number(),
-  dataEmissao: z.any(),
-  dataVencimento: z.any(),
-  status: z.enum(['Pendente', 'Recebida']),
-});
-
-export type ContaAReceber = z.infer<typeof contaAReceberSchema>;
+import { ContaAReceber } from "@/lib/schemas";
 
 export const subscribeToContasAReceber = (callback: (contas: ContaAReceber[]) => void) => {
   return onSnapshot(collection(db, "contasAReceber"), (querySnapshot: QuerySnapshot<DocumentData>) => {
