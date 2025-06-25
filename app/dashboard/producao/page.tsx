@@ -11,7 +11,6 @@ import { format } from 'date-fns';
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
 import { Timestamp } from "firebase/firestore";
-
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
@@ -27,20 +26,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
-import { Producao, producaoSchema } from "@/lib/schemas";
-import { registrarProducao, updateProducao, setProducaoStatus } from "@/lib/services/producao.services";
+import { Producao, producaoFormSchema, ProducaoFormValues } from "@/lib/schemas";
+import { registrarProducao, updateProducao, setProducaoStatus, subscribeToProducoes } from "@/lib/services/producao.services";
 
 
-const formSchema = producaoSchema.pick({
-    data: true,
-    responsavelId: true,
-    abateId: true,
-    lote: true,
-    descricao: true,
-    produtos: true,
-});
-
-type ProducaoFormValues = z.infer<typeof formSchema>;
 type ProducaoComDetalhes = Producao & { responsavelNome?: string, registradorRole?: string };
 
 const defaultFormValues: ProducaoFormValues = {
@@ -115,7 +104,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
                         <FormField name={`produtos.${index}.perda`} control={control} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="text-xs">Perda Calculada</FormLabel>
-                                <FormControl><Input type="number" step="0.01" {...field} readOnly className="bg-muted-foreground/20" /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
                             </FormItem>
                         )} />
                     </div>
@@ -140,7 +129,7 @@ export default function ProducaoPage() {
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
     const form = useForm<ProducaoFormValues>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(producaoFormSchema),
         defaultValues: defaultFormValues,
     });
 
@@ -190,7 +179,7 @@ export default function ProducaoPage() {
     const handleEdit = (producao: ProducaoComDetalhes) => {
         setIsEditing(true);
         setEditingId(producao.id!);
-        reset({
+        form.reset({
             ...producao,
             data: producao.data instanceof Timestamp ? producao.data.toDate() : producao.data,
         });
@@ -230,7 +219,7 @@ export default function ProducaoPage() {
                 await updateProducao(editingId, finalValues);
                 toast.success("Produção atualizada com sucesso!");
             } else {
-                await registrarProducao(finalValues, { uid: user.uid, nome: user.displayName || "Usuário" });
+                await registrarProducao(finalValues, { uid: user.uid, nome: user.displayName || "Usuário", role });
                 toast.success("Lote de produção registrado com sucesso!");
             }
             resetForm();

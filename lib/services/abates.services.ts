@@ -35,8 +35,19 @@ export const subscribeToAbatesByDateRange = (dateRange: DateRange | undefined, c
   const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     let abates: Abate[] = [];
     querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        abates.push({ id: doc.id, ...data, data: data.data.toDate() } as Abate);
+        const docData = doc.data();
+        const dataToParse = {
+            id: doc.id,
+            ...docData,
+            data: docData.data instanceof Timestamp ? docData.data.toDate() : docData.data
+        };
+
+        const parsed = abateSchema.safeParse(dataToParse);
+        if (parsed.success) {
+            abates.push(parsed.data);
+        } else {
+            console.error("Documento de abate inválido:", doc.id, parsed.error.format());
+        }
     });
 
     let filteredData = abates.filter(abate => abate.status !== 'inativo');

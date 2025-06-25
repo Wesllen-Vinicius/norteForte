@@ -47,7 +47,6 @@ export const registrarProducao = async (producaoData: ProducaoFormValues, user: 
 };
 
 export const subscribeToProducoes = (callback: (producoes: Producao[]) => void) => {
-    // Consulta simplificada para evitar a necessidade de índice
     const q = query(collection(db, "producoes"));
 
     return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -70,7 +69,7 @@ export const subscribeToProducoes = (callback: (producoes: Producao[]) => void) 
       });
 
       const filtered = producoes.filter(p => p.status !== 'inativo');
-      callback(filtered.sort((a, b) => b.data.getTime() - a.data.getTime()));
+      callback(filtered.sort((a, b) => (a.data as Date).getTime() - (b.data as Date).getTime()));
     }, (error) => {
       console.error("Erro no listener de Produções:", error);
     });

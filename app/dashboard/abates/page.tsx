@@ -20,12 +20,9 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { DateRangePicker } from "@/components/date-range-picker";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
 import { Abate, abateSchema } from "@/lib/schemas";
 import { addAbate, updateAbate, setAbateStatus, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
 import { useAuthStore } from "@/store/auth.store";
@@ -253,23 +250,20 @@ export default function AbatesPage() {
     );
 
     return (
-        <div className="container mx-auto py-8 px-4 md:px-6 space-y-8">
-             <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmInactivation} title="Você tem certeza?" description="Esta ação não pode ser desfeita. O registro será inativado." />
-            <CrudLayout
-                formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
-                formContent={formContent}
-                tableTitle="Histórico de Abates"
-                tableContent={
-                    isLoading ? (
-                        <div className="space-y-2">
-                            <div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>
-                            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-                        </div>
-                    ) : (
-                        tableContent
-                    )
-                }
-            />
-        </div>
+        <CrudLayout
+            formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
+            formContent={formContent}
+            tableTitle="Histórico de Abates"
+            tableContent={
+                isLoading ? (
+                    <div className="space-y-2">
+                        <div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>
+                        {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                ) : (
+                    tableContent
+                )
+            }
+        />
     );
 }

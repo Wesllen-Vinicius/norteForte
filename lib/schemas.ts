@@ -166,11 +166,25 @@ export const compraSchema = z.object({
   notaFiscal: z.string().min(1, "O número da nota fiscal é obrigatório."),
   data: z.date({ required_error: "A data é obrigatória." }),
   itens: z.array(itemCompradoSchema).min(1, "Adicione pelo menos um item."),
-  condicaoPagamento: z.string().min(1, "A condição de pagamento é obrigatória."),
   valorTotal: z.coerce.number(),
-  contaBancariaId: z.string().optional(),
+  contaBancariaId: z.string().min(1, "A conta de origem é obrigatória."),
+
+  condicaoPagamento: z.enum(['A_VISTA', 'A_PRAZO'], { required_error: "Selecione a condição." }),
+  numeroParcelas: z.coerce.number().min(1, "Pelo menos uma parcela é necessária.").optional(),
+  dataPrimeiroVencimento: z.date().optional(),
+
   createdAt: z.any().optional(),
+  status: z.enum(['ativo', 'inativo']).default('ativo').optional(), // Adicionando status para soft-delete
+}).refine((data) => {
+    if (data.condicaoPagamento === 'A_PRAZO') {
+        return !!data.numeroParcelas && !!data.dataPrimeiroVencimento;
+    }
+    return true;
+}, {
+    message: "Para pagamentos a prazo, o número de parcelas e a data do primeiro vencimento são obrigatórios.",
+    path: ["numeroParcelas"],
 });
+
 export type Compra = z.infer<typeof compraSchema>;
 
 export const abateSchema = z.object({
@@ -186,6 +200,7 @@ export const abateSchema = z.object({
     role: z.enum(['ADMINISTRADOR', 'USUARIO']).optional(),
   }),
   createdAt: z.any().optional(),
+  status: z.enum(['ativo', 'inativo']).default('ativo').optional(),
 });
 export type Abate = z.infer<typeof abateSchema>;
 
@@ -198,10 +213,8 @@ export const itemProduzidoSchema = z.object({
   quantidade: z.coerce.number().min(0, "A quantidade deve ser um número positivo."),
   perda: z.coerce.number().min(0, "A perda não pode ser negativa."),
 });
-
 export type ItemProduzido = z.infer<typeof itemProduzidoSchema>;
 
-// Schema da entidade COMPLETA (como é salva no banco)
 export const producaoSchema = z.object({
   id: z.string().optional(),
   data: z.date({ required_error: "A data é obrigatória." }),
@@ -220,7 +233,6 @@ export const producaoSchema = z.object({
 });
 export type Producao = z.infer<typeof producaoSchema>;
 
-// NOVO: Schema EXCLUSIVO para o formulário de produção
 export const producaoFormSchema = producaoSchema.pick({
     data: true,
     responsavelId: true,
