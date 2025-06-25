@@ -1,19 +1,33 @@
-// lib/services/relatorios.services.ts
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, Timestamp } from "firebase/firestore";
-// CORREÇÃO: Importando os tipos do arquivo centralizado
-import { Movimentacao, Venda, Producao } from "@/lib/schemas";
+import {
+    Movimentacao,
+    Venda,
+    Producao,
+    Cliente,
+    Fornecedor,
+    Produto,
+    Funcionario,
+    Compra,
+    ContaAReceber
+} from "@/lib/schemas";
 
-const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, dataFim: Date): Promise<T[]> => {
+// Função genérica atualizada para aceitar o nome do campo de data
+const getDataInPeriod = async <T>(
+    collectionName: string,
+    dateField: string,
+    dataInicio: Date,
+    dataFim: Date
+): Promise<T[]> => {
     const collectionRef = collection(db, collectionName);
     const inicioTimestamp = Timestamp.fromDate(dataInicio);
     const fimTimestamp = Timestamp.fromDate(new Date(dataFim.setHours(23, 59, 59, 999)));
 
     const q = query(
         collectionRef,
-        where("data", ">=", inicioTimestamp),
-        where("data", "<=", fimTimestamp),
-        orderBy("data", "desc")
+        where(dateField, ">=", inicioTimestamp),
+        where(dateField, "<=", fimTimestamp),
+        orderBy(dateField, "desc")
     );
 
     const querySnapshot = await getDocs(q);
@@ -21,13 +35,12 @@ const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, data
 
     querySnapshot.forEach((doc) => {
         const docData = doc.data();
-        // Garante que a conversão de data seja segura
-        const dataConvertida = docData.data instanceof Timestamp ? docData.data.toDate() : new Date();
+        const dataConvertida = docData[dateField] instanceof Timestamp ? docData[dateField].toDate() : new Date();
 
         const typedData = {
           ...docData,
           id: doc.id,
-          data: dataConvertida,
+          [dateField]: dataConvertida,
         } as T;
         data.push(typedData);
     });
@@ -35,14 +48,46 @@ const getDataInPeriod = async <T>(collectionName: string, dataInicio: Date, data
     return data;
 }
 
+// Funções existentes
 export const getMovimentacoesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
-    return getDataInPeriod<Movimentacao>("movimentacoesEstoque", dataInicio, dataFim);
+    return getDataInPeriod<Movimentacao>("movimentacoesEstoque", "data", dataInicio, dataFim);
 }
 
 export const getVendasPorPeriodo = (dataInicio: Date, dataFim: Date) => {
-    return getDataInPeriod<Venda>("vendas", dataInicio, dataFim);
+    return getDataInPeriod<Venda>("vendas", "data", dataInicio, dataFim);
 }
 
 export const getProducoesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
-    return getDataInPeriod<Producao>("producoes", dataInicio, dataFim);
+    return getDataInPeriod<Producao>("producoes", "data", dataInicio, dataFim);
+}
+
+// Novas funções de relatório
+export const getClientesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Cliente>("clientes", "createdAt", dataInicio, dataFim);
+}
+
+export const getFornecedoresPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Fornecedor>("fornecedores", "createdAt", dataInicio, dataFim);
+}
+
+export const getProdutosPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Produto>("produtos", "createdAt", dataInicio, dataFim);
+}
+
+export const getFuncionariosPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Funcionario>("funcionarios", "createdAt", dataInicio, dataFim);
+}
+
+export const getComprasPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<Compra>("compras", "data", dataInicio, dataFim);
+}
+
+// Nota: Contas a Pagar e Receber podem não ter um campo 'createdAt' padronizado, usamos 'dataEmissao'.
+export const getContasAPagarPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    // Assumindo que a coleção se chama 'contasAPagar' e o campo de data é 'dataEmissao'
+    return getDataInPeriod<any>("contasAPagar", "dataEmissao", dataInicio, dataFim);
+}
+
+export const getContasAReceberPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<ContaAReceber>("contasAReceber", "dataEmissao", dataInicio, dataFim);
 }

@@ -17,8 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { createUserInAuth } from "@/lib/services/auth.services";
-import { setUserDoc, SystemUser, updateUserRole, userSchema } from "@/lib/services/user.services";
+import { setUserDoc,updateUserRole } from "@/lib/services/user.services";
 import { useDataStore } from "@/store/data.store";
+import { SystemUser, userSchema } from "@/lib/schemas";
 
 type UserFormValues = z.infer<typeof userSchema>;
 

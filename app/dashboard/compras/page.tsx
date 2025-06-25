@@ -8,10 +8,8 @@ import { toast } from "sonner";
 import { IconPlus, IconTrash, IconPencil, IconChevronDown, IconChevronUp, IconAlertTriangle } from "@tabler/icons-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ColumnDef, Row } from "@tanstack/react-table";
-
+import { ColumnDef} from "@tanstack/react-table";
 import { CrudLayout } from "@/components/crud-layout";
-import { GenericForm } from "@/components/generic-form";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";

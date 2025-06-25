@@ -15,9 +15,9 @@ import { CardDescription } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Produto } from "@/lib/services/produtos.services";
-import { registrarMovimentacao, movimentacaoSchema } from "@/lib/services/estoque.services";
+import { registrarMovimentacao } from "@/lib/services/estoque.services";
 import { useDataStore } from "@/store/data.store";
+import { movimentacaoSchema, Produto } from "@/lib/schemas";
 
 type MovimentacaoFormValues = z.infer<typeof movimentacaoSchema>;
 

@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, runTransaction, where } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, where, runTransaction } from "firebase/firestore";
 import { ContaBancaria } from "@/lib/schemas";
 import { User } from "firebase/auth";
 
@@ -17,10 +17,14 @@ export const addContaBancaria = (data: ContaBancariaPayload, user: { uid: string
 };
 
 export const subscribeToContasBancarias = (callback: (contas: ContaBancaria[]) => void) => {
-  const q = query(collection(db, "contasBancarias"), where("status", "==", "ativa"), orderBy("nomeConta", "asc"));
+  // CORREÇÃO: Removido o orderBy da consulta para evitar o erro de índice.
+  const q = query(collection(db, "contasBancarias"), where("status", "==", "ativa"));
+
   return onSnapshot(q, (snapshot) => {
     const contas = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ContaBancaria[];
-    callback(contas);
+    // A ordenação agora é feita no lado do cliente.
+    const contasOrdenadas = contas.sort((a, b) => a.nomeConta.localeCompare(b.nomeConta));
+    callback(contasOrdenadas);
   });
 };
 

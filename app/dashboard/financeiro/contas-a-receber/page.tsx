@@ -6,17 +6,15 @@ import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
-
 import { db } from "@/lib/firebase";
 import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-// CORREÇÃO: Importando 'ContaAReceber' do local correto
-import { ContaAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
+import { updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
 import { useDataStore } from "@/store/data.store";
 import { updateVendaStatus } from "@/lib/services/vendas.services";
+import { ContaAReceber } from "@/lib/schemas";
 
 type ContaComNome = ContaAReceber & { clienteNome?: string };
 
