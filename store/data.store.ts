@@ -1,25 +1,12 @@
 import { create } from 'zustand';
+import { Unsubscribe } from 'firebase/firestore'; // Importe o tipo Unsubscribe
 
 // Importa todos os tipos e schemas do local centralizado
 import {
-    Cliente,
-    Produto,
-    Funcionario,
-    Cargo,
-    Unidade,
-    Categoria,
-    Fornecedor,
-    Abate,
-    Producao,
-    Venda,
-    Compra,
-    Meta,
-    SystemUser,
-    ContaBancaria,
-    DespesaOperacional // Adicionado o tipo de Despesa
+    Cliente, Produto, Funcionario, Cargo, Unidade, Categoria, Fornecedor, Abate, Producao, Venda, Compra, Meta, SystemUser, ContaBancaria, DespesaOperacional
 } from '@/lib/schemas';
 
-// Importa apenas as funções de seus respectivos serviços
+// Importa todas as funções de subscribe
 import { subscribeToClientes } from '@/lib/services/clientes.services';
 import { subscribeToProdutos } from '@/lib/services/produtos.services';
 import { subscribeToFuncionarios } from '@/lib/services/funcionarios.services';
@@ -53,12 +40,15 @@ interface DataState {
   users: SystemUser[];
   contasBancarias: ContaBancaria[];
   despesas: DespesaOperacional[];
-  isInitialized: boolean;
   contasAPagar: any[];
+  isInitialized: boolean;
+  unsubscribers: Unsubscribe[]; // Array para guardar as funções de unsubscribe
   initializeSubscribers: () => void;
+  clearSubscribers: () => void; // Nova função para limpar os listeners
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
+  // ... (estados existentes)
   clientes: [],
   produtos: [],
   funcionarios: [],
@@ -76,28 +66,39 @@ export const useDataStore = create<DataState>((set, get) => ({
   despesas: [],
   contasAPagar: [],
   isInitialized: false,
+  unsubscribers: [], // Inicia o array vazio
 
   initializeSubscribers: () => {
     if (get().isInitialized) return;
 
     console.log("Inicializando todos os listeners de dados globais...");
 
-    subscribeToClientes((data: Cliente[]) => set({ clientes: data }));
-    subscribeToProdutos((data: Produto[]) => set({ produtos: data }));
-    subscribeToFuncionarios((data: Funcionario[]) => set({ funcionarios: data }));
-    subscribeToCargos((data: Cargo[]) => set({ cargos: data }));
-    subscribeToUnidades((data: Unidade[]) => set({ unidades: data }));
-    subscribeToCategorias((data: Categoria[]) => set({ categorias: data }));
-    subscribeToFornecedores((data: Fornecedor[]) => set({ fornecedores: data }));
-    subscribeToAbatesByDateRange(undefined, (data: Abate[]) => set({ abates: data }));
-    subscribeToProducoes((data: Producao[]) => set({ producoes: data }));
-    subscribeToVendas((data: Venda[]) => set({ vendas: data }));
-    subscribeToCompras((data: Compra[]) => set({ compras: data }));
-    subscribeToMetas((data: Meta[]) => set({ metas: data }));
-    subscribeToUsers((data: SystemUser[]) => set({ users: data }));
-    subscribeToContasBancarias((data: ContaBancaria[]) => set({ contasBancarias: data }));
-    subscribeToDespesas((data: DespesaOperacional[]) => set({ despesas: data }));
-    subscribeToContasAPagar((data) => set({ contasAPagar: data }));
-    set({ isInitialized: true });
+    const newUnsubscribers: Unsubscribe[] = [];
+
+    // Guarda cada função de unsubscribe no array
+    newUnsubscribers.push(subscribeToClientes((data) => set({ clientes: data })));
+    newUnsubscribers.push(subscribeToProdutos((data) => set({ produtos: data })));
+    newUnsubscribers.push(subscribeToFuncionarios((data) => set({ funcionarios: data })));
+    newUnsubscribers.push(subscribeToCargos((data) => set({ cargos: data })));
+    newUnsubscribers.push(subscribeToUnidades((data) => set({ unidades: data })));
+    newUnsubscribers.push(subscribeToCategorias((data) => set({ categorias: data })));
+    newUnsubscribers.push(subscribeToFornecedores((data) => set({ fornecedores: data })));
+    newUnsubscribers.push(subscribeToAbatesByDateRange(undefined, (data) => set({ abates: data })));
+    newUnsubscribers.push(subscribeToProducoes((data) => set({ producoes: data })));
+    newUnsubscribers.push(subscribeToVendas((data) => set({ vendas: data })));
+    newUnsubscribers.push(subscribeToCompras((data) => set({ compras: data })));
+    newUnsubscribers.push(subscribeToMetas((data) => set({ metas: data })));
+    newUnsubscribers.push(subscribeToUsers((data) => set({ users: data })));
+    newUnsubscribers.push(subscribeToContasBancarias((data) => set({ contasBancarias: data })));
+    newUnsubscribers.push(subscribeToDespesas((data) => set({ despesas: data })));
+    newUnsubscribers.push(subscribeToContasAPagar((data) => set({ contasAPagar: data })));
+
+    set({ isInitialized: true, unsubscribers: newUnsubscribers });
+  },
+
+  clearSubscribers: () => {
+    console.log("Limpando todos os listeners de dados...");
+    get().unsubscribers.forEach((unsub) => unsub()); // Chama cada função de unsubscribe
+    set({ isInitialized: false, unsubscribers: [] }); // Reseta o estado
   },
 }));

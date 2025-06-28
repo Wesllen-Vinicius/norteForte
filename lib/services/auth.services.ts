@@ -5,6 +5,7 @@ import {
     GoogleAuthProvider,
     signInWithPopup,
     createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
 } from 'firebase/auth';
 import { LoginValues } from '@/lib/schemas';
 
@@ -35,4 +36,8 @@ export const createUserInAuth = async (email: string, password: string): Promise
         console.error("Erro ao criar usuário na autenticação:", error);
         throw new Error('Não foi possível criar o acesso para o usuário.');
     }
+};
+
+export const sendPasswordReset = async (email: string) => {
+    return sendPasswordResetEmail(auth, email);
 };

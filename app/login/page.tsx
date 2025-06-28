@@ -1,26 +1,27 @@
 "use client"
 
+import { useState } from "react"; // Importar o useState
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { IconLoader } from "@tabler/icons-react";
+import { IconLoader, IconBrandGoogle } from "@tabler/icons-react";
+import IconInnerShadowTop from '@tabler/icons-react/dist/esm/icons/IconInnerShadowTop';
 
-// CORREÇÃO AQUI: Importações separadas
 import { loginSchema, LoginValues } from "@/lib/schemas";
-import { signInWithEmail } from "@/lib/services/auth.services";
-
+import { signInWithEmail, signInWithGoogle } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LoginGuard } from "@/components/login-guard";
-
+import { PasswordResetDialog } from "@/components/password-reset-dialog"; // Importar o novo componente
 
 export default function LoginPage() {
     const router = useRouter();
+    const [isResetDialogOpen, setIsResetDialogOpen] = useState(false); // Estado para controlar o dialog
+
     const form = useForm<LoginValues>({
         resolver: zodResolver(loginSchema),
         defaultValues: { email: "", password: "" },
@@ -45,48 +46,75 @@ export default function LoginPage() {
         });
     };
 
+    const handleGoogleSignIn = async () => {
+        const promise = signInWithGoogle();
+        toast.promise(promise, {
+            loading: "Autenticando com o Google...",
+            success: () => {
+                router.push('/dashboard');
+                return "Login realizado com sucesso!";
+            },
+            error: "Falha na autenticação com o Google."
+        });
+    }
+
     return (
         <LoginGuard>
-            <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-muted/20 to-muted/80 p-4">
-                <div className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
-                    <Card className="shadow-2xl shadow-primary/10">
-                        <CardHeader className="text-center">
-                            <CardTitle className="text-3xl font-bold">Norte Forte</CardTitle>
-                            <CardDescription>Acesso ao sistema de gestão</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
-                                <div className="space-y-4">
-                                    <FormField name="email" control={form.control} render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>E-mail</FormLabel>
-                                            <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                    <FormField name="password" control={form.control} render={({ field }) => (
-                                        <FormItem>
+            <PasswordResetDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen} />
+
+            <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
+                <div className="flex items-center justify-center py-12">
+                    <div className="mx-auto grid w-[350px] gap-6">
+                        <div className="grid gap-2 text-center">
+                            <h1 className="text-3xl font-bold">Acessar</h1>
+                            <p className="text-balance text-muted-foreground">
+                                Digite seu e-mail e senha para entrar no sistema.
+                            </p>
+                        </div>
+                        <GenericForm schema={loginSchema} onSubmit={onSubmit} formId="login-form" form={form}>
+                            <div className="grid gap-4">
+                                <FormField name="email" control={form.control} render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>E-mail</FormLabel>
+                                        <FormControl><Input type="email" placeholder="seu@email.com" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <FormField name="password" control={form.control} render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center">
                                             <FormLabel>Senha</FormLabel>
-                                            <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )} />
-                                </div>
-                            </GenericForm>
-                             <Button type="submit" form="login-form" className="w-full mt-6" size="lg" disabled={isSubmitting}>
-                                {isSubmitting ? (
-                                    <>
-                                        <IconLoader className="mr-2 h-4 w-4 animate-spin" />
-                                        Entrando...
-                                    </>
-                                ) : "Entrar"}
-                            </Button>
-                        </CardContent>
-                    </Card>
+                                            <button
+                                                type="button" // Impede o envio do formulário
+                                                onClick={() => setIsResetDialogOpen(true)} // Abre o dialog
+                                                className="ml-auto inline-block text-sm underline"
+                                            >
+                                                Esqueceu sua senha?
+                                            </button>
+                                        </div>
+                                        <FormControl><Input type="password" placeholder="******" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                                     {isSubmitting ? <IconLoader className="animate-spin" /> : "Entrar"}
+                                </Button>
+                            </div>
+                        </GenericForm>
+                    </div>
                 </div>
-                 <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
-                    &copy; {new Date().getFullYear()} Norte Forte. Todos os direitos reservados.
-                </footer>
+                <div className="hidden bg-muted lg:flex lg:flex-col lg:items-center lg:justify-center p-10">
+                    <div className="flex items-center gap-4 text-primary">
+                        <IconInnerShadowTop className="h-16 w-16" />
+                        <h1 className="text-6xl font-bold tracking-tighter">Norte Forte</h1>
+                    </div>
+                    <p className="text-lg text-muted-foreground mt-4 max-w-md text-center">
+                        Sistema de gestão.
+                    </p>
+                     <footer className="absolute bottom-6 text-center text-sm text-muted-foreground">
+                        &copy; {new Date().getFullYear()} Norte Forte. Todos os direitos reservados.
+                    </footer>
+                </div>
             </div>
         </LoginGuard>
     );

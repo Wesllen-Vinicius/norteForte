@@ -1,8 +1,8 @@
-// store/auth.store.ts
 import { create } from 'zustand';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { useDataStore } from './data.store'; // Importa a DataStore
 
 interface AuthState {
   user: User | null;
@@ -21,6 +21,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   initializeAuthListener: () => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Se o usuário está logado, inicializa os listeners de dados
+        useDataStore.getState().initializeSubscribers();
+
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
@@ -29,6 +32,8 @@ export const useAuthStore = create<AuthState>((set) => ({
           set({ user: user, role: null, isLoading: false });
         }
       } else {
+        useDataStore.getState().clearSubscribers();
+
         set({ user: null, role: null, isLoading: false });
       }
     });
