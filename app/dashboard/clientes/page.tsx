@@ -1,18 +1,18 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconSearch, IconLoader } from "@tabler/icons-react";
 import { Timestamp } from "firebase/firestore";
 
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MaskedInput } from "@/components/ui/masked-input";
@@ -22,12 +22,34 @@ import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import z from "zod";
 import { Separator } from "@/components/ui/separator";
+import { fetchCnpjData } from "@/lib/services/brasilapi.services";
+import { isValidCnpj, isValidCpf } from "@/lib/validators";
 
-type ClienteFormValues = z.infer<typeof clienteSchema>;
+
+// Validação refinada para CPF/CNPJ
+const formSchema = clienteSchema.superRefine((data, ctx) => {
+    if (data.tipoPessoa === 'fisica' && !isValidCpf(data.documento)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "CPF inválido.",
+            path: ["documento"],
+        });
+    }
+    if (data.tipoPessoa === 'juridica' && !isValidCnpj(data.documento)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "CNPJ inválido.",
+            path: ["documento"],
+        });
+    }
+});
+
+
+type ClienteFormValues = z.infer<typeof formSchema>;
 
 const defaultFormValues: DefaultValues<ClienteFormValues> = {
     nome: "",
-    tipoPessoa: undefined,
+    tipoPessoa: undefined, // O Select tratará o placeholder
     documento: "",
     telefone: "",
     email: "",
@@ -46,14 +68,62 @@ const defaultFormValues: DefaultValues<ClienteFormValues> = {
 export default function ClientesPage() {
     const clientes = useDataStore((state) => state.clientes);
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const [isFetchingCnpj, setIsFetchingCnpj] = useState(false);
     const { role } = useAuthStore();
 
     const form = useForm<ClienteFormValues>({
-        resolver: zodResolver(clienteSchema),
+        resolver: zodResolver(formSchema),
         defaultValues: defaultFormValues,
+        mode: "onBlur"
     });
 
     const tipoPessoa = form.watch("tipoPessoa");
+    const documento = form.watch("documento");
+
+    const showCnpjSearch = useMemo(() => {
+        return tipoPessoa === 'juridica' && isValidCnpj(documento);
+    }, [tipoPessoa, documento]);
+
+    // Efeito para limpar o campo de documento ao trocar o tipo de pessoa
+    useEffect(() => {
+        form.setValue("documento", "");
+    }, [tipoPessoa, form.setValue]);
+
+
+    const handleFetchCnpj = async () => {
+        const cnpj = form.getValues("documento")?.replace(/\D/g, '');
+        if (!cnpj) return;
+
+        setIsFetchingCnpj(true);
+        const promise = fetchCnpjData(cnpj);
+
+        toast.promise(promise, {
+            loading: 'Buscando dados do CNPJ...',
+            success: (data) => {
+                 form.reset({
+                    ...form.getValues(),
+                    nome: data.razao_social,
+                    email: data.email || '',
+                    telefone: data.ddd_telefone_1 || '',
+                    endereco: {
+                        logradouro: data.logradouro,
+                        numero: data.numero,
+                        bairro: data.bairro,
+                        cidade: data.municipio,
+                        uf: data.uf,
+                        cep: data.cep.replace(/\D/g, ''),
+                        complemento: data.complemento,
+                    }
+                });
+                setIsFetchingCnpj(false);
+                return "Dados preenchidos!";
+            },
+            error: (err) => {
+                setIsFetchingCnpj(false);
+                return err.message;
+            }
+        });
+    };
 
     const handleEdit = (cliente: Cliente) => {
         form.reset(cliente);
@@ -120,7 +190,7 @@ export default function ClientesPage() {
     ];
 
     const formContent = (
-        <GenericForm schema={clienteSchema} onSubmit={onSubmit} formId="cliente-form" form={form}>
+        <GenericForm schema={formSchema} onSubmit={onSubmit} formId="cliente-form" form={form}>
             <div className="space-y-4">
                 <FormField name="nome" control={form.control} render={({ field }) => (
                     <FormItem><FormLabel>Nome / Razão Social</FormLabel><FormControl><Input placeholder="Nome completo ou da empresa" {...field} /></FormControl><FormMessage /></FormItem>
@@ -141,15 +211,25 @@ export default function ClientesPage() {
                         </FormItem>
                     )} />
                     <FormField name="documento" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>CPF / CNPJ</FormLabel>
-                            <FormControl>
-                                <MaskedInput
-                                    placeholder="Número do documento"
-                                    mask={tipoPessoa === 'fisica' ? '999.999.999-99' : '99.999.999/9999-99'}
-                                    {...field}
-                                />
-                            </FormControl>
-                        <FormMessage /></FormItem>
+                         <FormItem>
+                            <FormLabel>CPF / CNPJ</FormLabel>
+                            <div className="flex items-start gap-2">
+                                <FormControl>
+                                    <MaskedInput
+                                        className="w-full"
+                                        placeholder="Número do documento"
+                                        mask={tipoPessoa === 'fisica' ? '000.000.000-00' : '00.000.000/0000-00'}
+                                        {...field}
+                                    />
+                                </FormControl>
+                                {showCnpjSearch && (
+                                    <Button type="button" size="icon" onClick={handleFetchCnpj} disabled={isFetchingCnpj}>
+                                        {isFetchingCnpj ? <IconLoader className="h-4 w-4 animate-spin" /> : <IconSearch className="h-4 w-4" />}
+                                    </Button>
+                                )}
+                            </div>
+                            <FormMessage />
+                        </FormItem>
                     )} />
                 </div>
 
@@ -157,7 +237,7 @@ export default function ClientesPage() {
                     <FormField name="telefone" control={form.control} render={({ field }) => (
                         <FormItem><FormLabel>Telefone</FormLabel>
                             <FormControl>
-                                <MaskedInput mask="(99) 99999-9999" placeholder="(XX) XXXXX-XXXX" {...field} />
+                                <MaskedInput mask="(00) 00000-0000" placeholder="(XX) XXXXX-XXXX" {...field} />
                             </FormControl>
                         <FormMessage /></FormItem>
                     )} />
@@ -182,7 +262,7 @@ export default function ClientesPage() {
 
                 <div className="grid md:grid-cols-2 gap-4">
                      <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="99999-999" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="00000-000" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
 
                  <div className="grid md:grid-cols-[2fr_1fr] gap-4">

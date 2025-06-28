@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconSearch, IconLoader } from "@tabler/icons-react";
 import { Timestamp } from "firebase/firestore";
 
 import { CrudLayout } from "@/components/crud-layout";
@@ -21,8 +21,20 @@ import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import z from "zod";
 import { MaskedInput } from "@/components/ui/masked-input";
+import { fetchCnpjData } from "@/lib/services/brasilapi.services";
+import { isValidCnpj } from "@/lib/validators";
 
-type FornecedorFormValues = z.infer<typeof fornecedorSchema>;
+const formSchema = fornecedorSchema.superRefine((data, ctx) => {
+    if (!isValidCnpj(data.cnpj)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "CNPJ inválido.",
+            path: ["cnpj"],
+        });
+    }
+});
+
+type FornecedorFormValues = z.infer<typeof formSchema>;
 
 const defaultFormValues: DefaultValues<FornecedorFormValues> = {
     razaoSocial: "",
@@ -44,11 +56,50 @@ export default function FornecedoresPage() {
     const fornecedores = useDataStore((state) => state.fornecedores);
     const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const [isFetchingCnpj, setIsFetchingCnpj] = useState(false);
 
     const form = useForm<FornecedorFormValues>({
-        resolver: zodResolver(fornecedorSchema),
+        resolver: zodResolver(formSchema),
         defaultValues: defaultFormValues,
+        mode: "onBlur",
     });
+
+    const cnpj = form.watch("cnpj");
+    const showCnpjSearch = useMemo(() => isValidCnpj(cnpj), [cnpj]);
+
+    const handleFetchCnpj = async () => {
+        const cnpjValue = form.getValues("cnpj")?.replace(/\D/g, '');
+        if (!cnpjValue) return;
+
+        setIsFetchingCnpj(true);
+        const promise = fetchCnpjData(cnpjValue);
+
+        toast.promise(promise, {
+            loading: 'Buscando dados do CNPJ...',
+            success: (data) => {
+                 form.reset({
+                    ...form.getValues(),
+                    razaoSocial: data.razao_social,
+                    contato: data.ddd_telefone_1 || '',
+                    endereco: {
+                        logradouro: data.logradouro,
+                        numero: data.numero,
+                        bairro: data.bairro,
+                        cidade: data.municipio,
+                        uf: data.uf,
+                        cep: data.cep.replace(/\D/g, ''),
+                        complemento: data.complemento,
+                    }
+                });
+                setIsFetchingCnpj(false);
+                return "Dados preenchidos!";
+            },
+            error: (err) => {
+                setIsFetchingCnpj(false);
+                return err.message;
+            }
+        });
+    };
 
     const handleEdit = (fornecedor: Fornecedor) => {
         form.reset(fornecedor);
@@ -114,11 +165,30 @@ export default function FornecedoresPage() {
     ];
 
     const formContent = (
-        <GenericForm schema={fornecedorSchema} onSubmit={onSubmit} formId="fornecedor-form" form={form}>
+        <GenericForm schema={formSchema} onSubmit={onSubmit} formId="fornecedor-form" form={form}>
             <div className="space-y-4">
-                 <FormField name="razaoSocial" control={form.control} render={({ field }) => (<FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Nome da empresa" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField name="cnpj" control={form.control} render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><MaskedInput mask="99.999.999/9999-99" placeholder="00.000.000/0000-00" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField name="contato" control={form.control} render={({ field }) => (<FormItem><FormLabel>Contato (Telefone)</FormLabel><FormControl><MaskedInput mask="(99) 99999-9999" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField name="razaoSocial" control={form.control} render={({ field }) => (
+                    <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Nome da empresa" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
+                 <FormField name="cnpj" control={form.control} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>CNPJ</FormLabel>
+                        <div className="flex items-start gap-2">
+                            <FormControl>
+                                <MaskedInput mask="00.000.000/0000-00" placeholder="00.000.000/0000-00" {...field} />
+                            </FormControl>
+                            {showCnpjSearch && (
+                                <Button type="button" size="icon" onClick={handleFetchCnpj} disabled={isFetchingCnpj}>
+                                    {isFetchingCnpj ? <IconLoader className="h-4 w-4 animate-spin" /> : <IconSearch className="h-4 w-4" />}
+                                </Button>
+                            )}
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                )} />
+                <FormField name="contato" control={form.control} render={({ field }) => (
+                    <FormItem><FormLabel>Contato (Telefone)</FormLabel><FormControl><MaskedInput mask="(00) 00000-0000" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
+                )} />
 
                 <Separator className="my-6" />
                 <h3 className="text-lg font-medium">Endereço</h3>
@@ -130,7 +200,7 @@ export default function FornecedoresPage() {
                 <FormField name="endereco.complemento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Complemento (Opcional)</FormLabel><FormControl><Input placeholder="Apto, Bloco, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
                 <div className="grid md:grid-cols-2 gap-4">
                      <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="99999-999" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="00000-000" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
                  <div className="grid md:grid-cols-[2fr_1fr] gap-4">
                     <FormField name="endereco.cidade" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />

@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react";
 import { IMaskInput } from "react-imask";
 import { cn } from "@/lib/utils";
@@ -5,7 +7,7 @@ import { cn } from "@/lib/utils";
 interface MaskedInputProps {
   mask: any;
   name: string;
-  value?: string | number;
+  value?: string | number | null; // Aceita nulo para compatibilidade com o formulário
   placeholder?: string;
   onChange: (...event: any[]) => void;
   onBlur?: (...event: any[]) => void;
@@ -19,11 +21,9 @@ const MaskedInput = React.forwardRef<HTMLInputElement, MaskedInputProps>(
         {...props}
         inputRef={ref}
         name={name}
-        // CORREÇÃO: Converte explicitamente o valor para string.
-        // Trata também casos de nulo/indefinido para evitar erros.
+        // CORREÇÃO: Garante que o valor seja sempre uma string, tratando nulos e indefinidos.
         value={value == null ? "" : String(value)}
         onAccept={(val) => {
-          // O evento 'onAccept' da biblioteca é usado para notificar o react-hook-form
           onChange({ target: { name, value: val } });
         }}
         overwrite

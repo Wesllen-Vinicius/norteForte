@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Timestamp } from "firebase/firestore";
 
 // =================================================================
 // Schemas Base e de Autenticação
@@ -37,7 +38,7 @@ export const enderecoSchema = z.object({
 export const clienteSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
-  tipoPessoa: z.string({required_error: "Selecione o tipo de pessoa."}).refine(val => val === 'fisica' || val === 'juridica', { message: "Selecione o tipo de pessoa." }),
+  tipoPessoa: z.enum(["fisica", "juridica"], { required_error: "Selecione o tipo de pessoa." }),
   documento: z.string().min(11, "O CPF/CNPJ é obrigatório."),
   inscricaoEstadual: z.string().optional().or(z.literal("")),
   telefone: z.string().min(10, "O telefone é obrigatório."),
@@ -314,7 +315,7 @@ export const despesaOperacionalSchema = z.object({
     dataVencimento: z.date({ required_error: "A data de vencimento é obrigatória." }),
     categoria: z.string().min(3, "A categoria é obrigatória."),
     contaBancariaId: z.string().min(1, "Selecione a conta para débito."),
-    status: z.enum(['Pendente', 'Paga']), // Removido .default() para conformidade com o resolver
+    status: z.enum(['Pendente', 'Paga']),
     createdAt: z.any().optional(),
 });
 export type DespesaOperacional = z.infer<typeof despesaOperacionalSchema>;
