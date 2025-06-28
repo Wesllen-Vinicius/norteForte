@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash, IconSearch, IconLoader, IconAlertTriangle } from "@tabler/icons-react";
-import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 
 import { CrudLayout } from "@/components/crud-layout";
@@ -26,6 +25,7 @@ import { useDataStore } from "@/store/data.store";
 import z from "zod";
 import { fetchCnpjData } from "@/lib/services/brasilapi.services";
 import { isValidCnpj, isValidCpf } from "@/lib/validators";
+import { DetailsSubRow } from "@/components/details-sub-row";
 
 const formSchema = funcionarioSchema.superRefine((data, ctx) => {
     if (data.cnpj && !isValidCnpj(data.cnpj)) {
@@ -51,8 +51,7 @@ const defaultFormValues: DefaultValues<FuncionarioFormValues> = {
 };
 
 export default function FuncionariosPage() {
-    const funcionarios = useDataStore((state) => state.funcionarios);
-    const cargos = useDataStore((state) => state.cargos);
+    const { funcionarios, cargos } = useDataStore();
     const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
@@ -63,7 +62,6 @@ export default function FuncionariosPage() {
         mode: "onBlur"
     });
 
-    // CORREÇÃO: Adicionada validação de dependência
     const dependenciasFaltantes = useMemo(() => {
         const faltantes = [];
         if (!cargos || cargos.length === 0) {
@@ -138,6 +136,17 @@ export default function FuncionariosPage() {
         }
     };
 
+    const renderSubComponent = useCallback(({ row }: { row: Row<Funcionario> }) => {
+        const prestador = row.original;
+        const details = [
+            { label: "CPF", value: prestador.cpf },
+            { label: "Banco", value: prestador.banco },
+            { label: "Agência", value: prestador.agencia },
+            { label: "Conta", value: prestador.conta },
+        ];
+        return <DetailsSubRow details={details} />;
+    }, []);
+
     const columns: ColumnDef<Funcionario & { cargoNome?: string }>[] = [
         { accessorKey: "nomeCompleto", header: "Nome" },
         { accessorKey: "razaoSocial", header: "Razão Social" },
@@ -147,9 +156,7 @@ export default function FuncionariosPage() {
             id: "actions",
             cell: ({ row }) => {
                 const prestador = row.original;
-                const createdAt = prestador.createdAt as Timestamp | undefined;
-                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
-
+                const isEditable = role === 'ADMINISTRADOR';
                 return (
                     <div className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(prestador)} disabled={!isEditable}>
@@ -215,7 +222,7 @@ export default function FuncionariosPage() {
                         <h3 className="text-lg font-medium">Dados Pessoais</h3>
                         <Separator className="mt-2" />
                         <div className="space-y-4 mt-4">
-                            <FormField name="nomeCompleto" control={form.control} render={({ field }) => (
+                             <FormField name="nomeCompleto" control={form.control} render={({ field }) => (
                                 <FormItem><FormLabel>Nome Completo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                             <div className="grid md:grid-cols-2 gap-4">
@@ -226,7 +233,7 @@ export default function FuncionariosPage() {
                                         </FormControl>
                                     <FormMessage /></FormItem>
                                 )} />
-                                <FormField name="contato" control={form.control} render={({ field }) => (
+                                 <FormField name="contato" control={form.control} render={({ field }) => (
                                     <FormItem><FormLabel>Telefone de Contato</FormLabel>
                                         <FormControl>
                                             <MaskedInput mask="(00) 00000-0000" placeholder="(00) 00000-0000" {...field} />
@@ -252,7 +259,7 @@ export default function FuncionariosPage() {
                         <Separator className="mt-2" />
                         <div className="space-y-4 mt-4">
                             <div className="grid md:grid-cols-3 gap-4">
-                                <FormField name="banco" control={form.control} render={({ field }) => (
+                                 <FormField name="banco" control={form.control} render={({ field }) => (
                                     <FormItem><FormLabel>Banco</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                                 )} />
                                 <FormField name="agencia" control={form.control} render={({ field }) => (
@@ -274,21 +281,12 @@ export default function FuncionariosPage() {
         )
     );
 
-    const tableContent = (
-        <GenericTable
-            columns={columns}
-            data={funcionariosComCargo}
-            filterPlaceholder="Filtrar por nome..."
-            filterColumnId="nomeCompleto"
-        />
-    );
-
     return (
         <CrudLayout
             formTitle={isEditing ? "Editar Prestador" : "Novo Prestador de Serviço"}
             formContent={formContent}
             tableTitle="Prestadores Cadastrados"
-            tableContent={tableContent}
+            tableContent={( <GenericTable columns={columns} data={funcionariosComCargo} filterPlaceholder="Filtrar por nome..." filterColumnId="nomeCompleto" renderSubComponent={renderSubComponent} /> )}
         />
     );
 }

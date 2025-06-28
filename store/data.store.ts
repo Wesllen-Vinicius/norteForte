@@ -34,7 +34,8 @@ import { subscribeToCompras } from '@/lib/services/compras.services';
 import { subscribeToMetas } from '@/lib/services/metas.services';
 import { subscribeToUsers } from '@/lib/services/user.services';
 import { subscribeToContasBancarias } from '@/lib/services/contasBancarias.services';
-import { subscribeToDespesas } from '@/lib/services/despesas.services'; // Adicionado o serviço de despesas
+import { subscribeToDespesas } from '@/lib/services/despesas.services';
+import { subscribeToContasAPagar } from '@/lib/services/contasAPagar.services';
 
 interface DataState {
   clientes: Cliente[];
@@ -51,8 +52,9 @@ interface DataState {
   metas: Meta[];
   users: SystemUser[];
   contasBancarias: ContaBancaria[];
-  despesas: DespesaOperacional[]; // Adicionado estado para despesas
+  despesas: DespesaOperacional[];
   isInitialized: boolean;
+  contasAPagar: any[];
   initializeSubscribers: () => void;
 }
 
@@ -71,7 +73,8 @@ export const useDataStore = create<DataState>((set, get) => ({
   metas: [],
   users: [],
   contasBancarias: [],
-  despesas: [], // Estado inicial para despesas
+  despesas: [],
+  contasAPagar: [],
   isInitialized: false,
 
   initializeSubscribers: () => {
@@ -93,8 +96,8 @@ export const useDataStore = create<DataState>((set, get) => ({
     subscribeToMetas((data: Meta[]) => set({ metas: data }));
     subscribeToUsers((data: SystemUser[]) => set({ users: data }));
     subscribeToContasBancarias((data: ContaBancaria[]) => set({ contasBancarias: data }));
-    subscribeToDespesas((data: DespesaOperacional[]) => set({ despesas: data })); // Adicionada a inscrição para despesas
-
+    subscribeToDespesas((data: DespesaOperacional[]) => set({ despesas: data }));
+    subscribeToContasAPagar((data) => set({ contasAPagar: data }));
     set({ isInitialized: true });
   },
 }));
