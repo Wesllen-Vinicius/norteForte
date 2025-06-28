@@ -23,8 +23,6 @@ type Stats = {
 type MovimentacoesChartData = { date: string; entradas: number; saidas: number; }[];
 type TopProductsChartData = { nome: string; quantidade: number; }[];
 type VendasCondicaoData = { name: string; value: number; fill: string; }[];
-
-// CORREÇÃO: O tipo agora reflete a estrutura completa do retorno do serviço
 type RendimentoProducaoData = {
   produzido: number;
   perdas: number;
@@ -55,7 +53,6 @@ export default function Page() {
         setMovimentacoesData(movData);
         setTopProductsData(topProdData);
         setVendasCondicaoData(vendasCondicao);
-        // CORREÇÃO: 'rendimento' agora é o objeto completo
         setRendimentoData(rendimento);
       } catch (error) {
         console.error("Erro ao buscar dados do dashboard:", error);

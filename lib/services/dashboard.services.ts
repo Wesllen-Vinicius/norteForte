@@ -2,11 +2,12 @@ import { db } from "@/lib/firebase";
 import { collection, getCountFromServer, getDocs, query, where, Timestamp, orderBy } from "firebase/firestore";
 import { format } from 'date-fns';
 import { useDataStore } from "@/store/data.store";
-import { Producao, Movimentacao } from "@/lib/schemas";
+import { Producao, Movimentacao, Venda } from "@/lib/schemas";
 
 const getCollectionCount = async (collectionName: string) => {
     const coll = collection(db, collectionName);
-    const snapshot = await getCountFromServer(coll);
+    const q = query(coll, where("status", "==", "ativo")); // Considera apenas ativos
+    const snapshot = await getCountFromServer(q);
     return snapshot.data().count;
 };
 
@@ -21,12 +22,12 @@ const getVendasMes = async () => {
     let lucroBruto = 0;
 
     querySnapshot.forEach(doc => {
-        const venda = doc.data();
+        const venda = doc.data() as Venda;
         if (venda && typeof venda.valorTotal === 'number') {
             valorTotal += venda.valorTotal;
         }
         if (Array.isArray(venda.produtos)) {
-            venda.produtos.forEach((item: any) => {
+            venda.produtos.forEach((item) => {
                 if (typeof item.precoUnitario === 'number' && typeof item.custoUnitario === 'number' && typeof item.quantidade === 'number') {
                     lucroBruto += (item.precoUnitario - item.custoUnitario) * item.quantidade;
                 }
@@ -39,16 +40,22 @@ const getVendasMes = async () => {
 const getContasResumo = async () => {
     const contasAPagarRef = collection(db, "contasAPagar");
     const contasAReceberRef = collection(db, "contasAReceber");
+    const despesasRef = collection(db, "despesas"); // Adicionado
 
     const qPagar = query(contasAPagarRef, where("status", "==", "Pendente"));
     const qReceber = query(contasAReceberRef, where("status", "==", "Pendente"));
+    const qDespesas = query(despesasRef, where("status", "==", "Pendente")); // Adicionado
 
-    const [pagarSnapshot, receberSnapshot] = await Promise.all([
+    const [pagarSnapshot, receberSnapshot, despesasSnapshot] = await Promise.all([
         getDocs(qPagar),
-        getDocs(qReceber)
+        getDocs(qReceber),
+        getDocs(qDespesas) // Adicionado
     ]);
 
-    const totalAPagar = pagarSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalComprasAPagar = pagarSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalDespesasAPagar = despesasSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalAPagar = totalComprasAPagar + totalDespesasAPagar; // Soma de compras e despesas
+
     const totalAReceber = receberSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
 
     return { totalAPagar, totalAReceber };
@@ -81,7 +88,8 @@ export const getMovimentacoesParaGrafico = async () => {
 
     const q = query(
         movimentacoesRef,
-        where("data", ">=", Timestamp.fromDate(trintaDiasAtras))
+        where("data", ">=", Timestamp.fromDate(trintaDiasAtras)),
+        orderBy("data", "asc")
     );
 
     const querySnapshot = await getDocs(q);
@@ -99,7 +107,6 @@ export const getMovimentacoesParaGrafico = async () => {
 
         if (unidadeSigla.toLowerCase() !== 'kg') return;
 
-        // CORREÇÃO: Verificação segura do tipo antes de usar
         const movData = mov.data as unknown;
         if (movData instanceof Timestamp) {
             const data = movData.toDate();
