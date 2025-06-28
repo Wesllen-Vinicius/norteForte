@@ -15,6 +15,15 @@ interface CnpjData {
   ddd_telefone_1: string;
 }
 
+// Interface para a resposta da API de CEP
+interface CepData {
+    cep: string;
+    state: string;
+    city: string;
+    neighborhood: string;
+    street: string;
+}
+
 /**
  * Busca dados de um CNPJ na BrasilAPI.
  * @param cnpj - O CNPJ a ser consultado (apenas números).
@@ -29,10 +38,30 @@ export async function fetchCnpjData(cnpj: string): Promise<CnpjData> {
     return response.data;
   } catch (error: any) {
     console.error("Erro ao buscar dados do CNPJ na BrasilAPI:", error.response?.data || error.message);
-    // Lança um erro específico para ser tratado na UI
     if (error.response && error.response.status === 404) {
         throw new Error("CNPJ não encontrado na base de dados da Receita Federal.");
     }
     throw new Error("Falha ao se comunicar com a API de consulta de CNPJ.");
   }
+}
+
+/**
+ * Busca dados de endereço a partir de um CEP na BrasilAPI.
+ * @param cep - O CEP a ser consultado (apenas números).
+ * @returns Os dados do endereço.
+ */
+export async function fetchCepData(cep: string): Promise<CepData> {
+    try {
+        const response = await axios.get(`https://brasilapi.com.br/api/cep/v1/${cep}`);
+        if (response.status !== 200 || !response.data) {
+            throw new Error("Resposta inválida da API de CEP.");
+        }
+        return response.data;
+    } catch (error: any) {
+        console.error("Erro ao buscar dados do CEP na BrasilAPI:", error.response?.data || error.message);
+        if (error.response && error.response.status === 404) {
+            throw new Error("CEP não encontrado.");
+        }
+        throw new Error("Falha ao se comunicar com a API de consulta de CEP.");
+    }
 }
