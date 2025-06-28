@@ -8,16 +8,14 @@ import {
     serverTimestamp,
     query,
     where,
-    getDocs, // Adicionado getDocs para a atualização de status
+    getDocs,
     QuerySnapshot,
     DocumentData,
     Timestamp,
     runTransaction,
-    orderBy // Adicionado orderBy
 } from "firebase/firestore";
 import { DespesaOperacional } from "@/lib/schemas";
 
-// CORREÇÃO: A função agora espera o objeto completo do formulário.
 export const addDespesa = async (despesa: Omit<DespesaOperacional, "id" | "createdAt">) => {
     try {
         await runTransaction(db, async (transaction) => {
@@ -49,7 +47,8 @@ export const addDespesa = async (despesa: Omit<DespesaOperacional, "id" | "creat
 };
 
 export const subscribeToDespesas = (callback: (despesas: DespesaOperacional[]) => void) => {
-    const q = query(collection(db, "despesas"), where("status", "==", "Pendente"), orderBy("dataVencimento", "asc"));
+    // CORREÇÃO: Removido o orderBy da consulta para não exigir um índice composto.
+    const q = query(collection(db, "despesas"), where("status", "==", "Pendente"));
 
     return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
         const despesas: DespesaOperacional[] = [];
@@ -61,7 +60,9 @@ export const subscribeToDespesas = (callback: (despesas: DespesaOperacional[]) =
                 dataVencimento: (data.dataVencimento as Timestamp).toDate(),
             } as DespesaOperacional);
         });
-        callback(despesas);
+        // A ordenação agora é feita no lado do cliente.
+        const despesasOrdenadas = despesas.sort((a, b) => a.dataVencimento.getTime() - b.dataVencimento.getTime());
+        callback(despesasOrdenadas);
     });
 };
 

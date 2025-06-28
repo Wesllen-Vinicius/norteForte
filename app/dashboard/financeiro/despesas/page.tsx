@@ -29,6 +29,7 @@ const defaultFormValues: DefaultValues<DespesaFormValues> = {
     dataVencimento: new Date(),
     categoria: "",
     contaBancariaId: "",
+    status: 'Pendente',
 };
 
 export default function DespesasPage() {
@@ -73,17 +74,11 @@ export default function DespesasPage() {
 
     const onSubmit = async (values: DespesaFormValues) => {
         try {
-            // Garante que o status seja 'Pendente' se não estiver definido
-            const dataToSubmit = {
-                ...values,
-                status: values.status || 'Pendente',
-            };
-
             if (isEditing && values.id) {
-                await updateDespesa(values.id, dataToSubmit);
+                await updateDespesa(values.id, values);
                 toast.success("Despesa atualizada com sucesso!");
             } else {
-                await addDespesa(dataToSubmit);
+                await addDespesa(values);
                 toast.success("Despesa cadastrada com sucesso!");
             }
             resetForm();
