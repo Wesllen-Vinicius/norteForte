@@ -5,10 +5,10 @@ import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { IconPlus, IconTrash, IconPencil, IconChevronDown, IconChevronUp, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { ColumnDef} from "@tanstack/react-table";
+import { ColumnDef } from "@tanstack/react-table";
 import { CrudLayout } from "@/components/crud-layout";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
@@ -56,17 +56,21 @@ export default function ComprasPage() {
     const watchedCondicao = useWatch({ control: form.control, name: 'condicaoPagamento' });
     const watchedTotal = form.watch('valorTotal');
 
-    const materiasPrimas = useMemo(() => produtos.filter(p => p.tipoProduto === 'MATERIA_PRIMA'), [produtos]);
+    // Agora inclui Matéria-Prima e Uso Interno
+    const produtosComprados = useMemo(() =>
+        produtos.filter(p => p.tipoProduto === 'MATERIA_PRIMA' || p.tipoProduto === 'USO_INTERNO'),
+    [produtos]);
+
     const fornecedorOptions = useMemo(() => fornecedores.map(f => ({ label: f.razaoSocial, value: f.id! })), [fornecedores]);
     const contasBancariasOptions = useMemo(() => contasBancarias.map(c => ({ label: `${c.nomeConta} (${c.banco})`, value: c.id! })), [contasBancarias]);
 
     const dependenciasFaltantes = useMemo(() => {
         const faltantes = [];
         if (!fornecedores || fornecedores.length === 0) faltantes.push({ nome: "Fornecedores", link: "/dashboard/fornecedores" });
-        if (materiasPrimas.length === 0) faltantes.push({ nome: "Matérias-Primas", link: "/dashboard/produtos" });
+        if (produtosComprados.length === 0) faltantes.push({ nome: "Produtos (Matéria-Prima/Uso Interno)", link: "/dashboard/produtos" });
         if (!contasBancarias || contasBancarias.length === 0) faltantes.push({ nome: "Contas Bancárias", link: "/dashboard/financeiro/contas-bancarias" });
         return faltantes;
-    }, [fornecedores, materiasPrimas, contasBancarias]);
+    }, [fornecedores, produtosComprados, contasBancarias]);
 
     const comprasEnriquecidas = useMemo(() => {
         return compras.map(c => ({
@@ -95,6 +99,13 @@ export default function ComprasPage() {
            toast.error("Falha ao registrar compra", { description: error.message });
        }
     };
+
+    const handleItemChange = (index: number, produtoId: string) => {
+        const produto = produtosComprados.find(p => p.id === produtoId);
+        if(produto){
+            form.setValue(`itens.${index}.produtoNome`, produto.nome);
+        }
+    }
 
     const columns: ColumnDef<CompraComDetalhes>[] = [
         { header: "Data", cell: ({row}) => format(row.original.data, 'dd/MM/yyyy') },
@@ -145,11 +156,11 @@ export default function ComprasPage() {
 
                     <Separator />
                     <div className="space-y-4">
-                        <FormLabel>Itens da Compra (Matéria-Prima)</FormLabel>
+                        <FormLabel>Itens da Compra</FormLabel>
                         {fields.map((field, index) => (
                             <div key={field.id} className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-start">
                                 <FormField name={`itens.${index}.produtoId`} control={form.control} render={({ field: formField }) => (
-                                    <FormItem><Select onValueChange={formField.onChange} value={formField.value}><FormControl><SelectTrigger><SelectValue placeholder="Matéria-Prima" /></SelectTrigger></FormControl><SelectContent>{materiasPrimas.map(p => <SelectItem key={p.id} value={p.id!}>{p.nome}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                    <FormItem><Select onValueChange={(value) => {formField.onChange(value); handleItemChange(index, value);}} value={formField.value}><FormControl><SelectTrigger><SelectValue placeholder="Produto/Item" /></SelectTrigger></FormControl><SelectContent>{produtosComprados.map(p => <SelectItem key={p.id} value={p.id!}>{p.nome}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                                 )}/>
                                 <FormField name={`itens.${index}.quantidade`} control={form.control} render={({ field }) => (
                                     <FormItem><FormControl><Input type="number" placeholder="Qtd" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl></FormItem>

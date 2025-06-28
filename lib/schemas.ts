@@ -22,17 +22,28 @@ export type SystemUser = z.infer<typeof userSchema>;
 
 
 // =================================================================
-// Schemas de Cadastros Principais
+// Schemas de Cadastros Principais (com campos fiscais)
 // =================================================================
+
+export const enderecoSchema = z.object({
+    logradouro: z.string().min(1, "O logradouro é obrigatório."),
+    numero: z.string().min(1, "O número é obrigatório."),
+    bairro: z.string().min(1, "O bairro é obrigatório."),
+    cidade: z.string().min(1, "A cidade é obrigatória."),
+    uf: z.string().length(2, "UF deve ter 2 caracteres."),
+    cep: z.string().min(8, "O CEP é obrigatório."),
+    complemento: z.string().optional(),
+});
 
 export const clienteSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
   tipoPessoa: z.enum(["fisica", "juridica"], { required_error: "Selecione o tipo de pessoa." }),
   documento: z.string().min(11, "O CPF/CNPJ é obrigatório."),
+  inscricaoEstadual: z.string().optional().or(z.literal("")),
   telefone: z.string().min(10, "O telefone é obrigatório."),
   email: z.string().email("O e-mail é obrigatório e deve ser válido."),
-  endereco: z.string().min(5, "O endereço é obrigatório."),
+  endereco: enderecoSchema, // Corrigido para usar o schema aninhado
   createdAt: z.any().optional(),
   status: z.enum(['ativo', 'inativo']).default('ativo').optional(),
 });
@@ -50,7 +61,7 @@ export const fornecedorSchema = z.object({
   razaoSocial: z.string().min(3, "A Razão Social é obrigatória."),
   cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
   contato: z.string().min(10, "O telefone de contato é obrigatório."),
-  endereco: z.string().min(5, "O endereço é obrigatório."),
+  endereco: enderecoSchema, // Corrigido para usar o schema aninhado
   dadosBancarios: dadosBancariosSchema,
   createdAt: z.any().optional(),
   status: z.enum(['ativo', 'inativo']).default('ativo').optional(),
@@ -112,7 +123,9 @@ export const produtoVendaSchema = baseProdutoSchema.extend({
   precoVenda: z.coerce.number().positive("O preço de venda deve ser positivo."),
   custoUnitario: z.coerce.number().min(0),
   sku: z.string().optional().or(z.literal("")),
-  ncm: z.string().optional().or(z.literal("")),
+  ncm: z.string().min(8, "NCM é obrigatório e deve ter 8 dígitos.").max(8),
+  cfop: z.string().min(4, "CFOP é obrigatório e deve ter 4 dígitos.").max(4),
+  cest: z.string().optional().or(z.literal("")),
 });
 
 export const produtoUsoInternoSchema = baseProdutoSchema.extend({
@@ -174,7 +187,7 @@ export const compraSchema = z.object({
   dataPrimeiroVencimento: z.date().optional(),
 
   createdAt: z.any().optional(),
-  status: z.enum(['ativo', 'inativo']).default('ativo').optional(), // Adicionando status para soft-delete
+  status: z.enum(['ativo', 'inativo']).default('ativo').optional(),
 }).refine((data) => {
     if (data.condicaoPagamento === 'A_PRAZO') {
         return !!data.numeroParcelas && !!data.dataPrimeiroVencimento;
@@ -204,9 +217,6 @@ export const abateSchema = z.object({
 });
 export type Abate = z.infer<typeof abateSchema>;
 
-// =================================================================
-// Schema para Produção
-// =================================================================
 export const itemProduzidoSchema = z.object({
   produtoId: z.string().min(1, "Selecione um produto."),
   produtoNome: z.string(),
@@ -243,8 +253,6 @@ export const producaoFormSchema = producaoSchema.pick({
 });
 export type ProducaoFormValues = z.infer<typeof producaoFormSchema>;
 
-
-
 export const itemVendidoSchema = z.object({
   produtoId: z.string(),
   produtoNome: z.string(),
@@ -273,9 +281,13 @@ export const vendaSchema = z.object({
     nome: z.string(),
   }),
   createdAt: z.any().optional(),
+  nfe: z.object({
+    id: z.string().optional(),
+    status: z.string().optional(),
+    url: z.string().optional(),
+  }).optional(),
 });
 export type Venda = z.infer<typeof vendaSchema>;
-
 
 // =================================================================
 // Schemas Financeiros e de Configuração
@@ -321,12 +333,26 @@ export const contaAReceberSchema = z.object({
 });
 export type ContaAReceber = z.infer<typeof contaAReceberSchema>;
 
+export const despesaOperacionalSchema = z.object({
+    id: z.string().optional(),
+    descricao: z.string().min(3, "A descrição é obrigatória."),
+    valor: z.coerce.number().positive("O valor deve ser positivo."),
+    dataVencimento: z.date({ required_error: "A data de vencimento é obrigatória." }),
+    categoria: z.string().min(3, "A categoria é obrigatória."),
+    contaBancariaId: z.string().min(1, "Selecione a conta para débito."),
+    status: z.enum(['Pendente', 'Paga']).default('Pendente'),
+    createdAt: z.any().optional(),
+});
+export type DespesaOperacional = z.infer<typeof despesaOperacionalSchema>;
+
+
 export const companyInfoSchema = z.object({
-  razaoSocial: z.string().optional(),
+  razaoSocial: z.string().min(3, "A Razão Social é obrigatória."),
   nomeFantasia: z.string().min(3, "O nome fantasia é obrigatório."),
-  cnpj: z.string().optional(),
-  endereco: z.string().optional(),
-  telefone: z.string().optional(),
-  email: z.string().email("Insira um e-mail válido.").optional().or(z.literal("")),
+  cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
+  inscricaoEstadual: z.string().min(1, "A Inscrição Estadual é obrigatória."),
+  endereco: enderecoSchema,
+  telefone: z.string().min(10, "O telefone é obrigatório."),
+  email: z.string().email("Insira um e-mail válido."),
 });
 export type CompanyInfo = z.infer<typeof companyInfoSchema>;

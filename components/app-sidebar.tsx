@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Users, Building, Package, ShoppingCart, DollarSign, Banknote, Landmark, FileText,
-  Settings, LayoutDashboard, Boxes, Beef, LineChart, ChevronDown, User, Tags,
+  Settings, LayoutDashboard, Boxes, Beef, LineChart, ChevronDown, User, Tags, Scale, ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigationStore } from '@/store/navigation.store';
@@ -25,7 +25,7 @@ const navItems = [
             { id: 'funcionarios', href: '/dashboard/funcionarios', icon: User, label: 'Funcionários' },
             { id: 'cargos', href: '/dashboard/cargos', icon: Tags, label: 'Cargos' },
             { id: 'categorias', href: '/dashboard/categorias', icon: Boxes, label: 'Categorias' },
-            { id: 'unidades', href: '/dashboard/unidades', icon: Beef, label: 'Unidades' },
+            { id: 'unidades', href: '/dashboard/unidades', icon: Scale, label: 'Unidades' },
         ],
     },
     { id: 'compras', href: '/dashboard/compras', icon: ShoppingCart, label: 'Compras' },
@@ -39,6 +39,8 @@ const navItems = [
         subItems: [
             { id: 'contas-a-pagar', href: '/dashboard/financeiro/contas-a-pagar', icon: Banknote, label: 'Contas a Pagar' },
             { id: 'contas-a-receber', href: '/dashboard/financeiro/contas-a-receber', icon: DollarSign, label: 'Contas a Receber' },
+            { id: 'despesas', href: '/dashboard/financeiro/despesas', icon: ClipboardList, label: 'Despesas' },
+            { id: 'fluxo-caixa', href: '/dashboard/financeiro/fluxo-caixa', icon: LineChart, label: 'Fluxo de Caixa' },
             { id: 'contas-bancarias', href: '/dashboard/financeiro/contas-bancarias', icon: Landmark, label: 'Contas Bancárias' },
         ],
     },
@@ -49,7 +51,7 @@ const navItems = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname();
-    const { expandedMenus, toggleMenu, setActiveItem, setIsNavigating } = useNavigationStore();
+    const { expandedMenus, toggleMenu, setIsNavigating } = useNavigationStore();
     const isExpanded = (id: string) => expandedMenus.includes(id);
 
     const handleNavigation = (url: string) => {

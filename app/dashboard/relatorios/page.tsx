@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
     getMovimentacoesPorPeriodo, getVendasPorPeriodo, getProducoesPorPeriodo, getClientesPorPeriodo,
     getFornecedoresPorPeriodo, getProdutosPorPeriodo, getFuncionariosPorPeriodo, getComprasPorPeriodo,
-    getContasAPagarPorPeriodo, getContasAReceberPorPeriodo
+    getContasAPagarPorPeriodo, getContasAReceberPorPeriodo, getDespesasPorPeriodo
 } from "@/lib/services/relatorios.services"
 import { Badge } from "@/components/ui/badge"
 import { useDataStore } from "@/store/data.store"
@@ -28,8 +28,10 @@ import { IconFileTypePdf, IconFileTypeXls, IconChevronDown, IconChevronUp } from
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
-    Movimentacao, Venda, Producao, Cliente, Fornecedor, Produto, Funcionario, Compra, ContaAReceber
+    Movimentacao, Venda, Producao, Cliente, Fornecedor, Produto, Funcionario, Compra, ContaAReceber, DespesaOperacional
 } from "@/lib/schemas"
+import Link from "next/link"
+
 
 // Estrutura para organizar os relatórios em grupos
 const reportGroups = {
@@ -43,7 +45,7 @@ const reportGroups = {
   },
   financeiro: {
     label: "Financeiro",
-    reports: { contasAPagar: "Contas a Pagar", contasAReceber: "Contas a Receber" },
+    reports: { contasAPagar: "Contas a Pagar", contasAReceber: "Contas a Receber", despesas: "Despesas Operacionais" },
   },
 };
 
@@ -65,7 +67,7 @@ type ContaAPagar = any;
 type EnrichedContaAPagar = ContaAPagar & { fornecedorNome?: string };
 type EnrichedContaAReceber = ContaAReceber & { clienteNome?: string };
 
-type ReportData = EnrichedVenda | EnrichedCompra | EnrichedProducao | Movimentacao | Cliente | Fornecedor | Produto | EnrichedFuncionario | EnrichedContaAPagar | EnrichedContaAReceber;
+type ReportData = EnrichedVenda | EnrichedCompra | EnrichedProducao | Movimentacao | Cliente | Fornecedor | Produto | EnrichedFuncionario | EnrichedContaAPagar | EnrichedContaAReceber | DespesaOperacional;
 
 interface SummaryProps { summary: { totalProduzido: number; totalPerdas: number; totalBruto: number; rendimento: number }; }
 interface SubComponentProps<TData> { row: Row<TData>; }
@@ -131,6 +133,7 @@ export default function RelatoriosPage() {
             case 'funcionarios': return [dataCol('createdAt', 'Data Cadastro'), {id: 'nomeCompleto', header: 'Nome', accessorKey: 'nomeCompleto'}, {id: 'cargoNome', header: 'Cargo', accessorKey: 'cargoNome'}, {id: 'contato', header: 'Contato', accessorKey: 'contato'}] as ColumnDef<ReportData>[];
             case 'contasAPagar': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {id: 'fornecedorNome', header: 'Fornecedor', accessorKey: 'fornecedorNome'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedContaAPagar).valor.toFixed(2)}` }, {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as EnrichedContaAPagar).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as EnrichedContaAPagar).status}</Badge> }] as ColumnDef<ReportData>[];
             case 'contasAReceber': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {id: 'clienteNome', header: 'Cliente', accessorKey: 'clienteNome'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedContaAReceber).valor.toFixed(2)}` }, {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as EnrichedContaAReceber).status === 'Recebida' ? 'default' : 'destructive'}>{(row.original as EnrichedContaAReceber).status}</Badge> }] as ColumnDef<ReportData>[];
+            case 'despesas': return [dataCol('createdAt', 'Data Lançamento'), {id: 'descricao', header: 'Descrição', accessorKey: 'descricao'}, {id: 'categoria', header: 'Categoria', accessorKey: 'categoria'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as DespesaOperacional).valor.toFixed(2)}` }, dataCol('dataVencimento', 'Vencimento'), {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as DespesaOperacional).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as DespesaOperacional).status}</Badge> }] as ColumnDef<ReportData>[];
             default: return [dataHoraCol('data', 'Data'), { id: 'produtoNome', header: "Produto", accessorKey: "produtoNome" }, { id: 'tipo', header: "Tipo", accessorKey: 'tipo', cell: ({ row }) => <Badge variant={(row.original as Movimentacao).tipo === 'entrada' ? 'default' : 'destructive'} className="capitalize">{(row.original as Movimentacao).tipo}</Badge> }, { id: 'quantidade', header: "Quantidade", accessorKey: "quantidade" }, { id: 'motivo', header: "Motivo", accessorKey: "motivo" }] as ColumnDef<ReportData>[];
         }
     }, [reportType]);
@@ -152,7 +155,7 @@ export default function RelatoriosPage() {
                 vendas: getVendasPorPeriodo, producao: getProducoesPorPeriodo, movimentacoes: getMovimentacoesPorPeriodo,
                 compras: getComprasPorPeriodo, clientes: getClientesPorPeriodo, fornecedores: getFornecedoresPorPeriodo,
                 produtos: getProdutosPorPeriodo, funcionarios: getFuncionariosPorPeriodo, contasAPagar: getContasAPagarPorPeriodo,
-                contasAReceber: getContasAReceberPorPeriodo,
+                contasAReceber: getContasAReceberPorPeriodo, despesas: getDespesasPorPeriodo,
             };
             const data = await reportFetchers[reportType](date.from, date.to);
             setReportData(data);
@@ -165,12 +168,10 @@ export default function RelatoriosPage() {
         }
     };
 
-    // Funções de exportação mantidas
     useEffect(() => { const initialSelection: Record<string, boolean> = {}; availableColumns.forEach(col => { if (col.id && 'header' in col && typeof col.header === 'string') { initialSelection[col.id] = true; } }); setSelectedColumns(initialSelection); }, [availableColumns]);
     const getExportValue = (row: ReportData, column: ColumnDef<ReportData>): string => { if ('accessorKey' in column && column.accessorKey) { const accessorKey = column.accessorKey as keyof ReportData; const value = (row as any)[accessorKey]; if (column.cell && typeof column.cell === 'function') { const cellContext = { row: { original: row } } as CellContext<ReportData, unknown>; const renderedOutput = column.cell(cellContext); if (renderedOutput === null || renderedOutput === undefined) return ''; if (React.isValidElement(renderedOutput)) { const props = renderedOutput.props as { children?: React.ReactNode }; return props.children ? String(props.children) : ''; } return String(renderedOutput); } return String(value ?? ''); } return ''; };
     const handleConfirmExport = () => { const columnsToExport = availableColumns.filter(col => col.id && 'header' in col && col.header && selectedColumns[col.id]); if (columnsToExport.length === 0) return toast.error("Selecione pelo menos uma coluna para exportar."); const headers = columnsToExport.map(col => String('header' in col ? col.header : '')); const data = enrichedData.map(row => columnsToExport.map(col => getExportValue(row, col)) ); if (exportType === 'pdf') { const doc = new jsPDF(); autoTable(doc, { head: [headers], body: data }); doc.save(`relatorio_${reportType}_${format(new Date(), 'dd-MM-yyyy')}.pdf`); } else { const escapeCsv = (str: string) => `"${String(str).replace(/"/g, '""')}"`; const csvContent = [ headers.join(','), ...data.map(row => row.map(escapeCsv).join(',')) ].join('\n'); const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); saveAs(blob, `relatorio_${reportType}_${format(new Date(), 'dd-MM-yyyy')}.csv`); } setIsExportDialogOpen(false); };
     const openExportDialog = (type: ExportType) => { if (!enrichedData.length) return toast.error("Não há dados para exportar."); setExportType(type); setIsExportDialogOpen(true); };
-
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 space-y-6">

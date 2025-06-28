@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -21,8 +21,27 @@ import { addCliente, updateCliente, setClienteStatus } from "@/lib/services/clie
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import z from "zod";
+import { Separator } from "@/components/ui/separator";
 
 type ClienteFormValues = z.infer<typeof clienteSchema>;
+
+const defaultFormValues: DefaultValues<ClienteFormValues> = {
+    nome: "",
+    tipoPessoa: undefined,
+    documento: "",
+    telefone: "",
+    email: "",
+    inscricaoEstadual: "",
+    endereco: {
+        logradouro: "",
+        numero: "",
+        bairro: "",
+        cidade: "",
+        uf: "",
+        cep: "",
+        complemento: "",
+    }
+};
 
 export default function ClientesPage() {
     const clientes = useDataStore((state) => state.clientes);
@@ -31,7 +50,7 @@ export default function ClientesPage() {
 
     const form = useForm<ClienteFormValues>({
         resolver: zodResolver(clienteSchema),
-        defaultValues: { id: "", nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "", endereco: "" },
+        defaultValues: defaultFormValues,
     });
 
     const tipoPessoa = form.watch("tipoPessoa");
@@ -52,7 +71,7 @@ export default function ClientesPage() {
     };
 
     const resetForm = () => {
-        form.reset({ id: "", nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "", endereco: "" });
+        form.reset(defaultFormValues);
         setIsEditing(false);
     };
 
@@ -76,7 +95,7 @@ export default function ClientesPage() {
         { accessorKey: "nome", header: "Nome" },
         { accessorKey: "telefone", header: "Telefone" },
         { accessorKey: "email", header: "E-mail" },
-        { accessorKey: "endereco", header: "Endereço" },
+        { accessorKey: "endereco.cidade", header: "Cidade" },
         {
             id: "actions",
             cell: ({ row }) => {
@@ -146,9 +165,30 @@ export default function ClientesPage() {
                         <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                 </div>
-                <FormField name="endereco" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input placeholder="Rua, Número, Bairro, Cidade - Estado" {...field} /></FormControl><FormMessage /></FormItem>
+
+                 <FormField name="inscricaoEstadual" control={form.control} render={({ field }) => (
+                    <FormItem><FormLabel>Inscrição Estadual (Opcional)</FormLabel><FormControl><Input placeholder="Número da Inscrição Estadual" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
+
+                <Separator className="my-6" />
+                <h3 className="text-lg font-medium">Endereço</h3>
+
+                <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+                    <FormField name="endereco.logradouro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Logradouro</FormLabel><FormControl><Input placeholder="Rua, Av, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField name="endereco.numero" control={form.control} render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input placeholder="123" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+
+                <FormField name="endereco.complemento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Complemento (Opcional)</FormLabel><FormControl><Input placeholder="Apto, Bloco, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+
+                <div className="grid md:grid-cols-2 gap-4">
+                     <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="99999-999" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+
+                 <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+                    <FormField name="endereco.cidade" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField name="endereco.uf" control={form.control} render={({ field }) => (<FormItem><FormLabel>UF</FormLabel><FormControl><Input maxLength={2} placeholder="Ex: SP" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-6">

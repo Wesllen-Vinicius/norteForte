@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -20,14 +20,23 @@ import { Separator } from "@/components/ui/separator";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import z from "zod";
+import { MaskedInput } from "@/components/ui/masked-input";
 
 type FornecedorFormValues = z.infer<typeof fornecedorSchema>;
 
-const defaultFormValues: FornecedorFormValues = {
+const defaultFormValues: DefaultValues<FornecedorFormValues> = {
     razaoSocial: "",
     cnpj: "",
     contato: "",
-    endereco: "",
+    endereco: {
+        logradouro: "",
+        numero: "",
+        bairro: "",
+        cidade: "",
+        uf: "",
+        cep: "",
+        complemento: "",
+    },
     dadosBancarios: { banco: "", agencia: "", conta: "", pix: "" }
 };
 
@@ -107,18 +116,26 @@ export default function FornecedoresPage() {
     const formContent = (
         <GenericForm schema={fornecedorSchema} onSubmit={onSubmit} formId="fornecedor-form" form={form}>
             <div className="space-y-4">
-                <FormField name="razaoSocial" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Nome da empresa" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField name="cnpj" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>CNPJ</FormLabel><FormControl><Input placeholder="00.000.000/0000-00" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField name="contato" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Contato (Telefone)</FormLabel><FormControl><Input placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField name="endereco" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Endereço</FormLabel><FormControl><Input placeholder="Rua, Número, Bairro, Cidade - Estado" {...field} /></FormControl><FormMessage /></FormItem>
-                )} />
+                 <FormField name="razaoSocial" control={form.control} render={({ field }) => (<FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Nome da empresa" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField name="cnpj" control={form.control} render={({ field }) => (<FormItem><FormLabel>CNPJ</FormLabel><FormControl><MaskedInput mask="99.999.999/9999-99" placeholder="00.000.000/0000-00" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField name="contato" control={form.control} render={({ field }) => (<FormItem><FormLabel>Contato (Telefone)</FormLabel><FormControl><MaskedInput mask="(99) 99999-9999" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem>)} />
+
+                <Separator className="my-6" />
+                <h3 className="text-lg font-medium">Endereço</h3>
+
+                <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+                    <FormField name="endereco.logradouro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Logradouro</FormLabel><FormControl><Input placeholder="Rua, Av, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField name="endereco.numero" control={form.control} render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input placeholder="123" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+                <FormField name="endereco.complemento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Complemento (Opcional)</FormLabel><FormControl><Input placeholder="Apto, Bloco, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <div className="grid md:grid-cols-2 gap-4">
+                     <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                     <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="99999-999" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+                 <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+                    <FormField name="endereco.cidade" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField name="endereco.uf" control={form.control} render={({ field }) => (<FormItem><FormLabel>UF</FormLabel><FormControl><Input maxLength={2} placeholder="Ex: SP" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
 
                 <Separator className="my-6" />
                 <h3 className="text-lg font-medium">Dados Bancários</h3>

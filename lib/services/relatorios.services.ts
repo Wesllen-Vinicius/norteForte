@@ -9,7 +9,8 @@ import {
     Produto,
     Funcionario,
     Compra,
-    ContaAReceber
+    ContaAReceber,
+    DespesaOperacional // Importado o tipo de Despesa
 } from "@/lib/schemas";
 
 // Função genérica atualizada para aceitar o nome do campo de data
@@ -35,12 +36,20 @@ const getDataInPeriod = async <T>(
 
     querySnapshot.forEach((doc) => {
         const docData = doc.data();
-        const dataConvertida = docData[dateField] instanceof Timestamp ? docData[dateField].toDate() : new Date();
+
+        // Converte todos os campos de data que são Timestamps
+        const convertedData: { [key: string]: any } = {};
+        for (const key in docData) {
+            if (docData[key] instanceof Timestamp) {
+                convertedData[key] = docData[key].toDate();
+            } else {
+                convertedData[key] = docData[key];
+            }
+        }
 
         const typedData = {
-          ...docData,
+          ...convertedData,
           id: doc.id,
-          [dateField]: dataConvertida,
         } as T;
         data.push(typedData);
     });
@@ -61,7 +70,6 @@ export const getProducoesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
     return getDataInPeriod<Producao>("producoes", "data", dataInicio, dataFim);
 }
 
-// Novas funções de relatório
 export const getClientesPorPeriodo = (dataInicio: Date, dataFim: Date) => {
     return getDataInPeriod<Cliente>("clientes", "createdAt", dataInicio, dataFim);
 }
@@ -82,12 +90,15 @@ export const getComprasPorPeriodo = (dataInicio: Date, dataFim: Date) => {
     return getDataInPeriod<Compra>("compras", "data", dataInicio, dataFim);
 }
 
-// Nota: Contas a Pagar e Receber podem não ter um campo 'createdAt' padronizado, usamos 'dataEmissao'.
 export const getContasAPagarPorPeriodo = (dataInicio: Date, dataFim: Date) => {
-    // Assumindo que a coleção se chama 'contasAPagar' e o campo de data é 'dataEmissao'
     return getDataInPeriod<any>("contasAPagar", "dataEmissao", dataInicio, dataFim);
 }
 
 export const getContasAReceberPorPeriodo = (dataInicio: Date, dataFim: Date) => {
     return getDataInPeriod<ContaAReceber>("contasAReceber", "dataEmissao", dataInicio, dataFim);
+}
+
+// Nova função para buscar despesas
+export const getDespesasPorPeriodo = (dataInicio: Date, dataFim: Date) => {
+    return getDataInPeriod<DespesaOperacional>("despesas", "dataVencimento", dataInicio, dataFim);
 }

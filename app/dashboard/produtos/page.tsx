@@ -42,7 +42,7 @@ export default function ProdutosPage() {
 
     const formVenda = useForm<ProdutoVenda>({
         resolver: zodResolver(produtoVendaSchema),
-        defaultValues: { tipoProduto: "VENDA", nome: "", unidadeId: "", precoVenda: 0, custoUnitario: 0, sku: "", ncm: "" },
+        defaultValues: { tipoProduto: "VENDA", nome: "", unidadeId: "", precoVenda: 0, custoUnitario: 0, sku: "", ncm: "", cfop: "", cest: "" },
     });
 
     const formUsoInterno = useForm<ProdutoUsoInterno>({
@@ -214,7 +214,7 @@ export default function ProdutosPage() {
           {currentForm === 'MATERIA_PRIMA' && dependencias.materiaPrima && !isEditing && renderDependencyAlert('MATERIA_PRIMA')}
 
           {(currentForm === 'MATERIA_PRIMA' && (!dependencias.materiaPrima || isEditing)) && (
-             <GenericForm schema={produtoMateriaPrimaSchema} onSubmit={onSubmit} formId="materia-prima-form" form={formMateriaPrima}>
+             <GenericForm schema={produtoMateriaPrimaSchema} onSubmit={onSubmit} formId="materia_prima-form" form={formMateriaPrima}>
                 <div className="space-y-4">
                     <FormField name="nome" control={formMateriaPrima.control} render={({ field }) => (
                        <FormItem><FormLabel>Descrição da Matéria-Prima</FormLabel><FormControl><Input placeholder="Ex: Animal Vivo, Embalagem" {...field} /></FormControl><FormMessage /></FormItem>
@@ -234,15 +234,31 @@ export default function ProdutosPage() {
           {(currentForm === 'VENDA' && (!dependencias.venda || isEditing)) && (
             <GenericForm schema={produtoVendaSchema} onSubmit={onSubmit} formId="venda-form" form={formVenda}>
                 <div className="space-y-4">
-                    {/* Campos do produto para venda... */}
+                    <FormField name="nome" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>Descrição do Produto</FormLabel><FormControl><Input placeholder="Ex: Picanha (kg), Linguiça (pacote)" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="unidadeId" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>Unidade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id!}>{u.nome} ({u.sigla})</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField name="precoVenda" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>Preço de Venda (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="ncm" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>NCM</FormLabel><FormControl><Input placeholder="8 dígitos" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField name="cfop" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>CFOP</FormLabel><FormControl><Input placeholder="4 dígitos" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                     <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="cest" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>CEST (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField name="sku" control={formVenda.control} render={({ field }) => (<FormItem><FormLabel>SKU (Opcional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
                 </div>
             </GenericForm>
           )}
 
           {(currentForm === 'USO_INTERNO' && (!dependencias.usoInterno || isEditing)) && (
-            <GenericForm schema={produtoUsoInternoSchema} onSubmit={onSubmit} formId="uso-interno-form" form={formUsoInterno}>
+            <GenericForm schema={produtoUsoInternoSchema} onSubmit={onSubmit} formId="uso_interno-form" form={formUsoInterno}>
                 <div className="space-y-4">
-                    {/* Campos do item de uso interno... */}
+                    <FormField name="nome" control={formUsoInterno.control} render={({ field }) => (<FormItem><FormLabel>Descrição do Item</FormLabel><FormControl><Input placeholder="Ex: Material de Limpeza, Bobina" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="categoriaId" control={formUsoInterno.control} render={({ field }) => (<FormItem><FormLabel>Categoria</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger></FormControl><SelectContent>{categorias.map(c => <SelectItem key={c.id} value={c.id!}>{c.nome}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField name="custoUnitario" control={formUsoInterno.control} render={({ field }) => (<FormItem><FormLabel>Custo (R$)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
                 </div>
             </GenericForm>
           )}
@@ -250,7 +266,7 @@ export default function ProdutosPage() {
           {currentForm && (
             <div className="flex justify-end gap-2 pt-6">
                 <Button type="button" variant="outline" onClick={resetForms}>Cancelar</Button>
-                <Button type="submit" form={`${currentForm.toLowerCase()}-form`}>
+                <Button type="submit" form={`${currentForm.toLowerCase().replace(/_/g, '-')}-form`}>
                     {isEditing ? "Salvar Alterações" : "Adicionar Produto"}
                 </Button>
             </div>

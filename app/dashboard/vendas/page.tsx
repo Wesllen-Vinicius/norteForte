@@ -22,42 +22,29 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { Venda, ItemVendido } from "@/lib/schemas";
+import { Venda, ItemVendido, vendaSchema } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
 import { z } from "zod";
 
-// CORREÇÃO: Schema específico para o formulário, resolvendo o conflito de tipo.
 const itemVendidoFormSchema = z.object({
     produtoId: z.string(),
     produtoNome: z.string(),
     quantidade: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
     precoUnitario: z.coerce.number().min(0, "O preço não pode ser negativo."),
     custoUnitario: z.coerce.number().min(0),
-    // Corrigido: 'estoqueDisponivel' agora é um número, sem ser opcional
     estoqueDisponivel: z.number(),
 }).refine(
     (data) => data.quantidade > 0 ? data.quantidade <= data.estoqueDisponivel : true,
     (data) => ({ message: `Estoque insuficiente. Disponível: ${data.estoqueDisponivel}`, path: ["quantidade"] })
 );
 
-const formVendaSchema = z.object({
-  clienteId: z.string().min(1, "Selecione um cliente."),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto à venda."),
-  valorTotal: z.coerce.number().min(0, "O valor total não pode ser negativo."),
-  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
-  metodoPagamento: z.string({ required_error: "O método de pagamento é obrigatório." }).min(1, "O método de pagamento é obrigatório."),
-  contaBancariaId: z.string().optional(),
-  numeroParcelas: z.coerce.number().optional(),
-  taxaCartao: z.coerce.number().optional(),
-  dataVencimento: z.date().optional(),
-}).refine(data => {
-    if (data.condicaoPagamento === "A_PRAZO") return !!data.dataVencimento;
-    return true;
-}, {
-    message: "A data de vencimento é obrigatória para vendas a prazo.",
-    path: ["dataVencimento"],
+const formVendaSchema = vendaSchema.pick({
+    clienteId: true, data: true, produtos: true, valorTotal: true, condicaoPagamento: true, metodoPagamento: true,
+    contaBancariaId: true, numeroParcelas: true, taxaCartao: true, dataVencimento: true
+}).extend({
+    produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto à venda."),
 });
+
 
 type VendaFormValues = z.infer<typeof formVendaSchema>;
 type VendaComDetalhes = Venda & { clienteNome?: string };
@@ -212,6 +199,7 @@ export default function VendasPage() {
         setEditingId(venda.id!);
         form.reset({
             ...venda,
+            data: venda.data,
             dataVencimento: venda.dataVencimento || undefined,
         });
     };
@@ -289,6 +277,17 @@ export default function VendasPage() {
         }
     };
 
+    const handleEmitirNFe = (vendaId: string) => {
+        toast.promise(
+            new Promise(resolve => setTimeout(resolve, 1500)), // Simula chamada de API
+            {
+                loading: `Emitindo NF-e para a venda ${vendaId.slice(0,5)}...`,
+                success: "NF-e emitida com sucesso! (Simulação)",
+                error: "Falha ao emitir NF-e. (Simulação)",
+            }
+        );
+    };
+
     const vendasEnriquecidas = useMemo(() => {
         return vendas.map(venda => ({
             ...venda,
@@ -307,7 +306,12 @@ export default function VendasPage() {
                 {row.original.numeroParcelas && row.original.numeroParcelas > 1 && <p className="text-xs text-muted-foreground">{row.original.numeroParcelas}x</p>}
             </div>
         ) },
-        { header: "Status", accessorKey: "status", cell: ({ row }) => <Badge variant={row.original.status === 'Paga' ? 'default' : 'destructive'}>{row.original.status}</Badge> },
+        { header: "Status Pgto.", accessorKey: "status", cell: ({ row }) => <Badge variant={row.original.status === 'Paga' ? 'default' : 'destructive'}>{row.original.status}</Badge> },
+        { header: "Status NF-e", accessorKey: "nfe.status", cell: ({ row }) => {
+            const nfeStatus = row.original.nfe?.status;
+            if(!nfeStatus) return <Badge variant="secondary">Não emitida</Badge>
+            return <Badge variant={nfeStatus === 'emitida' ? 'default' : 'destructive'}>{nfeStatus}</Badge>
+        }},
         { header: "Valor Final", accessorKey: "valorFinal", cell: ({ row }) => `R$ ${(row.original.valorFinal || row.original.valorTotal).toFixed(2)}` },
         {
             id: "actions",
@@ -315,7 +319,7 @@ export default function VendasPage() {
                 const venda = row.original;
                 return (
                     <div className="text-right space-x-1">
-                        <Button variant="outline" size="icon" onClick={() => toast.info("Funcionalidade de NF-e em desenvolvimento.")}>
+                        <Button variant="outline" size="icon" onClick={() => handleEmitirNFe(venda.id!)}>
                             <IconFileInvoice className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
