@@ -17,6 +17,10 @@ export const updateUserRole = async (uid: string, role: 'ADMINISTRADOR' | 'USUAR
 };
 
 export const subscribeToUsers = (callback: (users: SystemUser[]) => void) => {
+  // Ajustado para filtrar apenas usuários ativos por padrão, se houver campo 'status'
+  // const q = query(collection(db, "users"), where("status", "==", "ativo"));
+  // Para ver todos os usuários (ativos e inativos) para a tela de gestão, removemos o filtro padrão aqui.
+  // Se a intenção é mostrar apenas ativos no app, mas todos na gestão, a lógica de filtro deve ser no componente.
   return onSnapshot(collection(db, "users"), (querySnapshot: QuerySnapshot<DocumentData>) => {
     const users: SystemUser[] = [];
     querySnapshot.forEach((doc) => {
@@ -29,6 +33,12 @@ export const subscribeToUsers = (callback: (users: SystemUser[]) => void) => {
 export const deleteUserDoc = async (uid: string) => {
   const userDocRef = doc(db, "users", uid);
   await deleteDoc(userDocRef);
+};
+
+// Nova função para inativar um usuário (soft delete)
+export const setUserStatus = async (uid: string, status: 'ativo' | 'inativo') => {
+    const userDocRef = doc(db, "users", uid);
+    await updateDoc(userDocRef, { status });
 };
 
 
