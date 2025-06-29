@@ -1,26 +1,24 @@
 "use client"
 
-import { useState } from "react"; // Importar o useState
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { IconLoader, IconBrandGoogle } from "@tabler/icons-react";
+import { IconLoader } from "@tabler/icons-react";
 import IconInnerShadowTop from '@tabler/icons-react/dist/esm/icons/IconInnerShadowTop';
-
 import { loginSchema, LoginValues } from "@/lib/schemas";
-import { signInWithEmail, signInWithGoogle } from "@/lib/services/auth.services";
+import { signInWithEmail } from "@/lib/services/auth.services";
 import { GenericForm } from "@/components/generic-form";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LoginGuard } from "@/components/login-guard";
-import { PasswordResetDialog } from "@/components/password-reset-dialog"; // Importar o novo componente
+import { PasswordResetDialog } from "@/components/password-reset-dialog";
 
 export default function LoginPage() {
     const router = useRouter();
-    const [isResetDialogOpen, setIsResetDialogOpen] = useState(false); // Estado para controlar o dialog
+    const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 
     const form = useForm<LoginValues>({
         resolver: zodResolver(loginSchema),
@@ -45,18 +43,6 @@ export default function LoginPage() {
             },
         });
     };
-
-    const handleGoogleSignIn = async () => {
-        const promise = signInWithGoogle();
-        toast.promise(promise, {
-            loading: "Autenticando com o Google...",
-            success: () => {
-                router.push('/dashboard');
-                return "Login realizado com sucesso!";
-            },
-            error: "Falha na autenticação com o Google."
-        });
-    }
 
     return (
         <LoginGuard>
@@ -85,8 +71,8 @@ export default function LoginPage() {
                                         <div className="flex items-center">
                                             <FormLabel>Senha</FormLabel>
                                             <button
-                                                type="button" // Impede o envio do formulário
-                                                onClick={() => setIsResetDialogOpen(true)} // Abre o dialog
+                                                type="button"
+                                                onClick={() => setIsResetDialogOpen(true)}
                                                 className="ml-auto inline-block text-sm underline"
                                             >
                                                 Esqueceu sua senha?
