@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,12 +23,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { DetailsSubRow } from "@/components/details-sub-row";
 import { Abate, abateSchema } from "@/lib/schemas";
 import { addAbate, updateAbate, setAbateStatus, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 
-// O formSchema agora representa apenas os campos do formulário
 const formSchema = abateSchema.pick({
     data: true,
     total: true,
@@ -38,14 +39,14 @@ const formSchema = abateSchema.pick({
 });
 
 type AbateFormValues = z.infer<typeof formSchema>;
-type AbateComDetalhes = Abate & { responsavelNome?: string; registradorRole?: string; };
+type AbateComDetalhes = Abate & { responsavelNome?: string; registradorNome?: string; };
 
 export default function AbatesPage() {
     const { funcionarios, users, compras } = useDataStore();
     const { user, role } = useAuthStore();
 
     const [abates, setAbates] = useState<Abate[]>([]);
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -91,41 +92,42 @@ export default function AbatesPage() {
             })),
     [compras]);
 
-    const abatesEnriquecidos = useMemo(() => {
-        return abates.map(abate => {
-            const responsavel = funcionarios.find(f => f.id === abate.responsavelId)?.nomeCompleto || 'N/A';
-            const registradorRole = abate.registradoPor.role || users.find(u => u.uid === abate.registradoPor.uid)?.role || 'N/A';
+    const abatesEnriquecidos: AbateComDetalhes[] = useMemo(() => {
+        return abates.map(abate => ({
+            ...abate,
+            responsavelNome: funcionarios.find(f => f.id === abate.responsavelId)?.nomeCompleto || 'N/A',
+            registradorNome: abate.registradoPor.nome || 'N/A',
+        }));
+    }, [abates, funcionarios]);
 
-            return {
-                ...abate,
-                responsavelNome: responsavel,
-                registradorRole,
-            };
-        });
-    }, [abates, funcionarios, users]);
+    const renderSubComponent = useCallback(({ row }: { row: Row<AbateComDetalhes> }) => {
+        const abate = row.original;
+        const compraRef = compras.find(c => c.id === abate.compraId);
+
+        const details = [
+            { label: "Responsável pelo Abate", value: abate.responsavelNome },
+            { label: "Registrado Por", value: abate.registradorNome },
+            { label: "Referência da Compra", value: compraRef ? `NF ${compraRef.notaFiscal}` : 'N/A' },
+            { label: "Data do Registro", value: abate.createdAt ? format((abate.createdAt as Timestamp).toDate(), 'dd/MM/yyyy HH:mm') : 'N/A' },
+        ];
+        return <DetailsSubRow details={details} />;
+    }, [compras]);
 
     const columns: ColumnDef<AbateComDetalhes>[] = [
         { accessorKey: "data", header: "Data", cell: ({ row }) => format(row.original.data as Date, "dd/MM/yyyy") },
-        { header: "Ref. Compra", cell: ({ row }) => {
-            const compra = compras.find(c => c.id === row.original.compraId);
-            return compra ? `NF ${compra.notaFiscal}` : 'N/A';
-        }},
         { accessorKey: "total", header: "Total" },
         { accessorKey: "condenado", header: "Condenado" },
-        { accessorKey: "responsavelNome", header: "Responsável" },
-        { header: "Registrado Por", accessorKey: "registradoPor.nome" },
         {
             id: "actions",
             cell: ({ row }: { row: Row<AbateComDetalhes> }) => {
                 const item = row.original;
                 const createdAt = item.createdAt as Timestamp | undefined;
                 const podeEditar = role === 'ADMINISTRADOR' || (item.registradoPor.uid === user?.uid && createdAt && (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()));
-                const podeExcluir = role === 'ADMINISTRADOR';
 
                 return (
                     <div className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
-                        {podeExcluir && (
+                        {role === 'ADMINISTRADOR' && (
                             <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>
                         )}
                     </div>
@@ -194,7 +196,7 @@ export default function AbatesPage() {
       dependenciasFaltantes.length > 0 && !isEditing ? (
         <Alert variant="destructive">
             <IconAlertTriangle className="h-4 w-4" />
-            <AlertTitle>Cadastro de pré-requisitos necessário</AlertTitle>
+            <AlertTitle>Cadastro de pré-requisito necessário</AlertTitle>
             <AlertDescription>
                 Para registrar um abate, você precisa primeiro cadastrar:
                 <ul className="list-disc pl-5 mt-2">
@@ -246,6 +248,7 @@ export default function AbatesPage() {
             filterPlaceholder="Pesquisar por responsável..."
             filterColumnId="responsavelNome"
             tableControlsComponent={<DateRangePicker date={dateRange} onDateChange={setDateRange} />}
+            renderSubComponent={renderSubComponent}
         />
     );
 

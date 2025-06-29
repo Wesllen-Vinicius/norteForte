@@ -1,8 +1,8 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useForm, useFieldArray, useWatch, Control, UseFormSetValue } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Control, UseFormSetValue, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { IconPlus, IconTrash, IconPencil, IconAlertTriangle, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
 import { Timestamp } from "firebase/firestore";
+
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
@@ -26,10 +27,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import { Producao, producaoFormSchema, ProducaoFormValues } from "@/lib/schemas";
-import { registrarProducao, updateProducao, setProducaoStatus, subscribeToProducoes } from "@/lib/services/producao.services";
+import { registrarProducao, updateProducao, setProducaoStatus } from "@/lib/services/producao.services";
 
 
-type ProducaoComDetalhes = Producao & { responsavelNome?: string, registradorRole?: string };
+type ProducaoComDetalhes = Producao & { responsavelNome?: string; registradorNome?: string; registradorRole?: string };
 
 const defaultFormValues: ProducaoFormValues = {
     data: new Date(),
@@ -77,7 +78,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
             <div className="flex items-start gap-2">
                 <div className="flex-1 space-y-2">
                     <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field }) => (
-                        <FormItem><Combobox options={produtoOptions} {...field} placeholder="Selecione o produto" /></FormItem>
+                        <FormItem><Combobox options={produtoOptions} {...field} placeholder="Selecione o produto" searchPlaceholder="Buscar produto..." /></FormItem>
                     )} />
                     {produtoId && !metaExiste && (
                          <Alert variant="destructive" className="mt-2 text-xs">
@@ -103,7 +104,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
                         <FormField name={`produtos.${index}.perda`} control={control} render={({ field }) => (
                             <FormItem>
                                 <FormLabel className="text-xs">Perda Calculada</FormLabel>
-                                <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                                <FormControl><Input type="number" step="0.01" {...field} readOnly className="bg-muted-foreground/20" /></FormControl>
                             </FormItem>
                         )} />
                     </div>
@@ -143,7 +144,7 @@ export default function ProducaoPage() {
     const animaisValidosParaProducao = abateSelecionado ? abateSelecionado.total - abateSelecionado.condenado : 0;
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1500);
+        const timer = setTimeout(() => setIsLoading(false), 500);
         return () => clearTimeout(timer);
     }, []);
 
@@ -169,8 +170,9 @@ export default function ProducaoPage() {
         return filteredData.map(p => ({
             ...p,
             responsavelNome: (funcionarios || []).find(f => f.id === p.responsavelId)?.nomeCompleto || 'N/A',
+            registradorNome: p.registradoPor.nome || 'N/A',
             registradorRole: (users || []).find(u => u.uid === p.registradoPor.uid)?.role || 'N/A',
-        }));
+        })).sort((a, b) => (b.data as Date).getTime() - (a.data as Date).getTime());
     }, [producoes, dateRange, funcionarios, users]);
 
     const resetForm = () => { reset(defaultFormValues); setIsEditing(false); setEditingId(null); remove(); };
@@ -199,7 +201,7 @@ export default function ProducaoPage() {
         }
     };
 
-    const onSubmit = async (values: ProducaoFormValues) => {
+    const onSubmit: SubmitHandler<ProducaoFormValues> = async (values) => {
         if (!user || !role) {
             toast.error("Você precisa estar logado para realizar esta ação.");
             return;
@@ -227,16 +229,16 @@ export default function ProducaoPage() {
         }
     };
 
-    const renderSubComponent = ({ row }: { row: Row<ProducaoComDetalhes> }) => {
+    const renderSubComponent = useCallback(({ row }: { row: Row<ProducaoComDetalhes> }) => {
         const { produtos: todosOsProdutos, unidades } = useDataStore.getState();
 
         return (
-            <div className="p-4 bg-muted/50 animate-in fade-in-0 zoom-in-95">
+            <div className="p-4 bg-muted/20 animate-in fade-in-0 zoom-in-95">
                 <h4 className="font-semibold text-sm mb-2">Detalhes dos Produtos Gerados</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {row.original.produtos.map((p, i) => {
                         const produtoInfo = todosOsProdutos.find(prod => prod.id === p.produtoId);
-                        const unidadeNome = produtoInfo?.tipoProduto === 'VENDA'
+                        const unidadeNome = produtoInfo?.tipoProduto === 'VENDA' && produtoInfo.unidadeId
                             ? unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un'
                             : 'un';
 
@@ -251,27 +253,13 @@ export default function ProducaoPage() {
                 </div>
             </div>
         );
-    };
+    }, []);
 
     const columns: ColumnDef<ProducaoComDetalhes>[] = [
-        {
-          id: 'expander',
-          header: () => null,
-          cell: ({ row }) => (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => row.toggleExpanded()}
-              className="h-8 w-8"
-            >
-              {row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}
-            </Button>
-          ),
-        },
         { header: "Data", cell: ({ row }) => format(row.original.data as Date, 'dd/MM/yyyy') },
         { accessorKey: "lote", header: "Lote" },
         { accessorKey: "responsavelNome", header: "Responsável" },
-        { header: "Cadastrado Por", accessorKey: "registradoPor.nome" },
+        { header: "Cadastrado Por", accessorKey: "registradorNome" },
         { header: "Cargo Cad.", accessorKey: "registradorRole", cell: ({ row }) => <Badge variant={row.original.registradorRole === 'ADMINISTRADOR' ? 'default' : 'secondary'}>{row.original.registradorRole}</Badge> },
         { header: "Nº Produtos", cell: ({ row }) => row.original.produtos.length },
         { id: "actions", cell: ({ row }) => {
@@ -297,17 +285,11 @@ export default function ProducaoPage() {
         return faltantes;
     }, [abates, funcionarios, produtos]);
 
-    const tableControls = (
-      <div className="flex flex-col md:flex-row gap-4">
-          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
-      </div>
-    );
-
     const formContent = (
         dependenciasFaltantes.length > 0 && !isEditing ? (
             <Alert variant="destructive">
                 <IconAlertTriangle className="h-4 w-4" />
-                <AlertTitle>Cadastro de pré-requisitos necessário</AlertTitle>
+                <AlertTitle>Cadastro de pré-requisito necessário</AlertTitle>
                 <AlertDescription>
                     Para registrar uma produção, você precisa primeiro cadastrar:
                     <ul className="list-disc pl-5 mt-2">
@@ -323,8 +305,8 @@ export default function ProducaoPage() {
             <Form {...form}>
                 <form onSubmit={handleSubmit(onSubmit)} id="producao-form" className="space-y-4">
                     <FormField name="data" control={control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data</FormLabel><DatePicker date={field.value} onDateChange={field.onChange} /><FormMessage /></FormItem>)} />
-                    <FormField name="responsavelId" control={control} render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Combobox options={funcionarioOptions} {...field} placeholder="Selecione um responsável" /><FormMessage /></FormItem>)} />
-                    <FormField name="abateId" control={control} render={({ field }) => (<FormItem><FormLabel>Vincular Abate</FormLabel><Combobox options={abateOptions} {...field} placeholder="Selecione o abate de origem"/><FormMessage /></FormItem>)} />
+                    <FormField name="responsavelId" control={control} render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Combobox options={funcionarioOptions} {...field} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." /><FormMessage /></FormItem>)} />
+                    <FormField name="abateId" control={control} render={({ field }) => (<FormItem><FormLabel>Vincular Abate</FormLabel><Combobox options={abateOptions} {...field} placeholder="Selecione o abate de origem" searchPlaceholder="Buscar abate..."/><FormMessage /></FormItem>)} />
                     <FormField name="lote" control={control} render={({ field }) => (<FormItem><FormLabel>Lote</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
                     <FormField name="descricao" control={control} render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
                     <Separator className="my-6" />
@@ -364,7 +346,7 @@ export default function ProducaoPage() {
                             columns={columns}
                             data={filteredAndEnrichedProducoes}
                             renderSubComponent={renderSubComponent}
-                            tableControlsComponent={tableControls}
+                            tableControlsComponent={<DateRangePicker date={dateRange} onDateChange={setDateRange} />}
                             filterPlaceholder="Filtrar por lote..."
                             filterColumnId="lote"
                           />

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { ColumnDef, Row, CellContext } from "@tanstack/react-table"
 import { DateRange } from "react-day-picker"
 import { toast } from "sonner"
@@ -24,16 +24,13 @@ import {
 } from "@/lib/services/relatorios.services"
 import { Badge } from "@/components/ui/badge"
 import { useDataStore } from "@/store/data.store"
-import { IconFileTypePdf, IconFileTypeXls, IconChevronDown, IconChevronUp } from "@tabler/icons-react"
+import { IconFileTypePdf, IconFileTypeXls } from "@tabler/icons-react"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
     Movimentacao, Venda, Producao, Cliente, Fornecedor, Produto, Funcionario, Compra, ContaAReceber, DespesaOperacional
 } from "@/lib/schemas"
-import Link from "next/link"
 
-
-// Estrutura para organizar os relatórios em grupos
 const reportGroups = {
   operacional: {
     label: "Operacional",
@@ -58,7 +55,6 @@ const allReportLabels = {
 type ReportKey = keyof typeof allReportLabels;
 type ExportType = 'pdf' | 'csv';
 
-// Tipos Enriquecidos para exibição na tabela
 type EnrichedVenda = Venda & { clienteNome?: string };
 type EnrichedProducao = Producao & { responsavelNome?: string; registradoPorNome?: string; };
 type EnrichedCompra = Compra & { fornecedorNome?: string };
@@ -72,12 +68,10 @@ type ReportData = EnrichedVenda | EnrichedCompra | EnrichedProducao | Movimentac
 interface SummaryProps { summary: { totalProduzido: number; totalPerdas: number; totalBruto: number; rendimento: number }; }
 interface SubComponentProps<TData> { row: Row<TData>; }
 
-// Componentes Auxiliares
 const ProductionReportSummary = ({ summary }: SummaryProps) => ( <div className="mb-6 space-y-4 rounded-lg border bg-muted/50 p-4"> <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center"> <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Total Produzido</p><p className="text-xl font-bold text-green-500">{summary.totalProduzido.toFixed(2)} kg</p></div> <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Total de Perdas</p><p className="text-xl font-bold text-destructive">{summary.totalPerdas.toFixed(2)} kg</p></div> <div className="rounded-lg border bg-card p-3"><p className="text-sm text-muted-foreground">Peso Total (Bruto)</p><p className="text-xl font-bold">{summary.totalBruto.toFixed(2)} kg</p></div> </div> <div> <div className="flex justify-between mb-1"><span className="text-base font-medium text-muted-foreground">Rendimento Geral do Período</span><span className="text-base font-bold text-primary">{summary.rendimento.toFixed(1)}%</span></div> <Progress value={summary.rendimento} className="h-3" /> </div> </div> );
-const renderSubComponentProducao = ({ row }: SubComponentProps<EnrichedProducao>) => { const { unidades, produtos } = useDataStore.getState(); return ( <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95"> <h4 className="font-semibold text-sm mb-2">Produtos do Lote: {row.original.lote}</h4> <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2"> {row.original.produtos.map((p, i) => { const produtoInfo = produtos.find(prod => prod.id === p.produtoId); const unidadeNome = produtoInfo?.tipoProduto === 'VENDA' ? unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un' : 'un'; return ( <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm"> <p className="font-bold text-sm mb-1">{p.produtoNome}</p> <p><strong>Produzido:</strong> {p.quantidade.toFixed(2)} {unidadeNome}</p> <p className="text-destructive/80"><strong>Perda:</strong> {(p.perda || 0).toFixed(2)} {unidadeNome}</p> </div> ); })} </div> </div> ); };
+const renderSubComponentProducao = ({ row }: SubComponentProps<EnrichedProducao>) => { const { unidades, produtos } = useDataStore.getState(); return ( <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95"> <h4 className="font-semibold text-sm mb-2">Produtos do Lote: {row.original.lote}</h4> <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2"> {row.original.produtos.map((p, i) => { const produtoInfo = produtos.find(prod => prod.id === p.produtoId); const unidadeNome = produtoInfo?.tipoProduto === 'VENDA' && produtoInfo.unidadeId ? unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un' : 'un'; return ( <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm"> <p className="font-bold text-sm mb-1">{p.produtoNome}</p> <p><strong>Produzido:</strong> {p.quantidade.toFixed(2)} {unidadeNome}</p> <p className="text-destructive/80"><strong>Perda:</strong> {(p.perda || 0).toFixed(2)} {unidadeNome}</p> </div> ); })} </div> </div> ); };
 const renderSubComponentVendas = ({ row }: SubComponentProps<EnrichedVenda>) => { return ( <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95"> <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4> <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2"> {row.original.produtos.map((p, i) => ( <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm"> <p className="font-bold text-sm mb-1">{p.produtoNome}</p> <p><strong>Quantidade:</strong> {p.quantidade}</p> <p><strong>Preço Un.:</strong> R$ {p.precoUnitario.toFixed(2)}</p> </div> ))} </div> </div> ); };
 const renderSubComponentCompras = ({ row }: SubComponentProps<EnrichedCompra>) => { return ( <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95"> <h4 className="font-semibold text-sm mb-2">Itens da Compra (NF: {row.original.notaFiscal})</h4> <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2"> {row.original.itens.map((p, i) => ( <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm"> <p className="font-bold text-sm mb-1">{p.produtoNome}</p> <p><strong>Quantidade:</strong> {p.quantidade}</p> <p><strong>Custo Un.:</strong> R$ {p.custoUnitario.toFixed(2)}</p> </div> ))} </div> </div> ); };
-
 
 export default function RelatoriosPage() {
     const [date, setDate] = useState<DateRange | undefined>();
@@ -93,7 +87,7 @@ export default function RelatoriosPage() {
 
     const enrichedData = useMemo((): ReportData[] => {
         if (!reportData.length) return [];
-        let dataToEnrich: ReportData[] = reportData;
+        let dataToEnrich: any[] = reportData;
 
         switch (reportType) {
             case 'vendas': dataToEnrich = (reportData as Venda[]).map(v => ({ ...v, clienteNome: clientes.find(c => c.id === v.clienteId)?.nome || 'N/A' })); break;
@@ -119,22 +113,25 @@ export default function RelatoriosPage() {
     }, [enrichedData, reportType]);
 
     const availableColumns = useMemo<ColumnDef<ReportData>[]>(() => {
-        const expanderColumn: ColumnDef<ReportData> = { id: 'expander', header: () => null, cell: ({ row }) => (<Button variant="ghost" size="icon" onClick={() => row.toggleExpanded()} className="h-8 w-8">{row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}</Button>) };
-        const dataCol = (field: string, header: string): ColumnDef<ReportData> => ({ id: field, header, accessorKey: field, cell: ({ row }: any) => row.original[field] ? format(new Date(row.original[field]), "dd/MM/yyyy") : 'N/A' });
-        const dataHoraCol = (field: string, header: string): ColumnDef<ReportData> => ({ id: field, header, accessorKey: field, cell: ({ row }: any) => row.original[field] ? format(new Date(row.original[field]), "dd/MM/yyyy HH:mm") : 'N/A' });
+        const dataCol = (field: keyof ReportData, header: string): ColumnDef<ReportData> => ({
+            id: String(field), // Correção: Garantir que o ID seja uma string
+            header,
+            accessorKey: field,
+            cell: (info) => info.getValue() ? format(info.getValue<Date>(), "dd/MM/yyyy") : 'N/A'
+        });
 
         switch (reportType) {
-            case 'vendas': return [expanderColumn, dataHoraCol('data', 'Data'), { id: 'clienteNome', header: "Cliente", accessorKey: "clienteNome" }, { id: 'valorTotal', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedVenda).valorTotal.toFixed(2)}` }, { id: 'status', header: 'Status', accessorKey: 'status', cell: ({row}) => <Badge variant={(row.original as Venda).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as Venda).status}</Badge> }] as ColumnDef<ReportData>[];
-            case 'compras': return [expanderColumn, dataCol('data', 'Data'), {id: 'fornecedorNome', header: 'Fornecedor', accessorKey: 'fornecedorNome'}, {id: 'notaFiscal', header: 'NF', accessorKey: 'notaFiscal'}, { id: 'valorTotal', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedCompra).valorTotal.toFixed(2)}` }] as ColumnDef<ReportData>[];
-            case 'producao': return [expanderColumn, dataCol('data', 'Data'), {id: 'lote', header: 'Lote', accessorKey: 'lote'}, {id: 'responsavelNome', header: 'Responsável', accessorKey: 'responsavelNome'}] as ColumnDef<ReportData>[];
-            case 'clientes': return [dataCol('createdAt', 'Data Cadastro'), {id: 'nome', header: 'Nome', accessorKey: 'nome'}, {id: 'documento', header: 'Documento', accessorKey: 'documento'}, {id: 'telefone', header: 'Telefone', accessorKey: 'telefone'}] as ColumnDef<ReportData>[];
-            case 'fornecedores': return [dataCol('createdAt', 'Data Cadastro'), {id: 'razaoSocial', header: 'Razão Social', accessorKey: 'razaoSocial'}, {id: 'cnpj', header: 'CNPJ', accessorKey: 'cnpj'}, {id: 'contato', header: 'Contato', accessorKey: 'contato'}] as ColumnDef<ReportData>[];
-            case 'produtos': return [dataCol('createdAt', 'Data Cadastro'), {id: 'nome', header: 'Nome', accessorKey: 'nome'}, {id: 'tipoProduto', header: 'Tipo', accessorKey: 'tipoProduto'}, {id: 'quantidade', header: 'Estoque', accessorKey: 'quantidade'}] as ColumnDef<ReportData>[];
-            case 'funcionarios': return [dataCol('createdAt', 'Data Cadastro'), {id: 'nomeCompleto', header: 'Nome', accessorKey: 'nomeCompleto'}, {id: 'cargoNome', header: 'Cargo', accessorKey: 'cargoNome'}, {id: 'contato', header: 'Contato', accessorKey: 'contato'}] as ColumnDef<ReportData>[];
-            case 'contasAPagar': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {id: 'fornecedorNome', header: 'Fornecedor', accessorKey: 'fornecedorNome'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedContaAPagar).valor.toFixed(2)}` }, {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as EnrichedContaAPagar).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as EnrichedContaAPagar).status}</Badge> }] as ColumnDef<ReportData>[];
-            case 'contasAReceber': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {id: 'clienteNome', header: 'Cliente', accessorKey: 'clienteNome'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as EnrichedContaAReceber).valor.toFixed(2)}` }, {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as EnrichedContaAReceber).status === 'Recebida' ? 'default' : 'destructive'}>{(row.original as EnrichedContaAReceber).status}</Badge> }] as ColumnDef<ReportData>[];
-            case 'despesas': return [dataCol('createdAt', 'Data Lançamento'), {id: 'descricao', header: 'Descrição', accessorKey: 'descricao'}, {id: 'categoria', header: 'Categoria', accessorKey: 'categoria'}, { id: 'valor', header: "Valor", cell: ({ row }) => `R$ ${(row.original as DespesaOperacional).valor.toFixed(2)}` }, dataCol('dataVencimento', 'Vencimento'), {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as DespesaOperacional).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as DespesaOperacional).status}</Badge> }] as ColumnDef<ReportData>[];
-            default: return [dataHoraCol('data', 'Data'), { id: 'produtoNome', header: "Produto", accessorKey: "produtoNome" }, { id: 'tipo', header: "Tipo", accessorKey: 'tipo', cell: ({ row }) => <Badge variant={(row.original as Movimentacao).tipo === 'entrada' ? 'default' : 'destructive'} className="capitalize">{(row.original as Movimentacao).tipo}</Badge> }, { id: 'quantidade', header: "Quantidade", accessorKey: "quantidade" }, { id: 'motivo', header: "Motivo", accessorKey: "motivo" }] as ColumnDef<ReportData>[];
+            case 'vendas': return [{ accessorKey: 'data', header: 'Data', cell: (info) => format(info.getValue<Date>(), "dd/MM/yyyy")}, { accessorKey: "clienteNome", header: "Cliente" }, { accessorKey: 'valorTotal', header: "Valor", cell: (info) => `R$ ${info.getValue<number>().toFixed(2)}` }, { accessorKey: 'status', header: 'Status', cell: (info) => <Badge variant={info.getValue() === 'Paga' ? 'default' : 'destructive'}>{info.getValue<string>()}</Badge> }];
+            case 'compras': return [dataCol('data', 'Data'), {accessorKey: 'fornecedorNome', header: 'Fornecedor'}, {accessorKey: 'notaFiscal', header: 'NF'}, { accessorKey: 'valorTotal', header: "Valor", cell: (info) => `R$ ${info.getValue<number>().toFixed(2)}` }];
+            case 'producao': return [dataCol('data', 'Data'), {accessorKey: 'lote', header: 'Lote'}, {accessorKey: 'responsavelNome', header: 'Responsável'}];
+            case 'clientes': return [dataCol('createdAt', 'Data Cadastro'), {accessorKey: 'nome', header: 'Nome'}, {accessorKey: 'documento', header: 'Documento'}, {accessorKey: 'telefone', header: 'Telefone'}];
+            case 'fornecedores': return [dataCol('createdAt', 'Data Cadastro'), {accessorKey: 'razaoSocial', header: 'Razão Social'}, {accessorKey: 'cnpj', header: 'CNPJ'}, {accessorKey: 'contato', header: 'Contato'}];
+            case 'produtos': return [dataCol('createdAt', 'Data Cadastro'), {accessorKey: 'nome', header: 'Nome'}, {accessorKey: 'tipoProduto', header: 'Tipo'}, {accessorKey: 'quantidade', header: 'Estoque'}];
+            case 'funcionarios': return [dataCol('createdAt', 'Data Cadastro'), {accessorKey: 'nomeCompleto', header: 'Nome'}, {accessorKey: 'cargoNome', header: 'Cargo'}, {accessorKey: 'contato', header: 'Contato'}];
+            case 'contasAPagar': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {accessorKey: 'fornecedorNome', header: 'Fornecedor'}, { accessorKey: 'valor', header: "Valor", cell: (info) => `R$ ${info.getValue<number>().toFixed(2)}` }, {accessorKey: 'status', header: 'Status', cell: (info) => <Badge variant={info.getValue() === 'Paga' ? 'default' : 'destructive'}>{info.getValue<string>()}</Badge> }];
+            case 'contasAReceber': return [dataCol('dataEmissao', 'Emissão'), dataCol('dataVencimento', 'Vencimento'), {accessorKey: 'clienteNome', header: 'Cliente'}, { accessorKey: 'valor', header: "Valor", cell: (info) => `R$ ${info.getValue<number>().toFixed(2)}` }, {accessorKey: 'status', header: 'Status', cell: (info) => <Badge variant={info.getValue() === 'Recebida' ? 'default' : 'destructive'}>{info.getValue<string>()}</Badge> }];
+            case 'despesas': return [dataCol('createdAt', 'Data Lançamento'), {accessorKey: 'descricao', header: 'Descrição'}, {accessorKey: 'categoria', header: 'Categoria'}, { accessorKey: 'valor', header: "Valor", cell: (info) => `R$ ${info.getValue<number>().toFixed(2)}` }, dataCol('dataVencimento', 'Vencimento'), {id: 'status', header: 'Status', cell: ({row}) => <Badge variant={(row.original as DespesaOperacional).status === 'Paga' ? 'default' : 'destructive'}>{(row.original as DespesaOperacional).status}</Badge> }];
+            default: return [{ accessorKey: 'data', header: 'Data', cell: (info) => format(info.getValue<Date>(), "dd/MM/yyyy HH:mm") }, { accessorKey: "produtoNome", header: "Produto" }, { accessorKey: 'tipo', header: "Tipo", cell: (info) => <Badge variant={info.getValue() === 'entrada' ? 'default' : 'destructive'} className="capitalize">{info.getValue<string>()}</Badge> }, { accessorKey: "quantidade", header: "Quantidade" }, { accessorKey: "motivo", header: "Motivo" }];
         }
     }, [reportType]);
 
@@ -169,7 +166,7 @@ export default function RelatoriosPage() {
     };
 
     useEffect(() => { const initialSelection: Record<string, boolean> = {}; availableColumns.forEach(col => { if (col.id && 'header' in col && typeof col.header === 'string') { initialSelection[col.id] = true; } }); setSelectedColumns(initialSelection); }, [availableColumns]);
-    const getExportValue = (row: ReportData, column: ColumnDef<ReportData>): string => { if ('accessorKey' in column && column.accessorKey) { const accessorKey = column.accessorKey as keyof ReportData; const value = (row as any)[accessorKey]; if (column.cell && typeof column.cell === 'function') { const cellContext = { row: { original: row } } as CellContext<ReportData, unknown>; const renderedOutput = column.cell(cellContext); if (renderedOutput === null || renderedOutput === undefined) return ''; if (React.isValidElement(renderedOutput)) { const props = renderedOutput.props as { children?: React.ReactNode }; return props.children ? String(props.children) : ''; } return String(renderedOutput); } return String(value ?? ''); } return ''; };
+    const getExportValue = (row: ReportData, column: ColumnDef<ReportData>): string => { const accessor = 'accessorKey' in column ? column.accessorKey as keyof ReportData : undefined; if(accessor) { const value = (row as any)[accessor]; return String(value ?? ''); } if(column.cell && typeof column.cell === 'function'){ const cellContext = { row: { original: row } } as CellContext<ReportData, unknown>; const renderedOutput = column.cell(cellContext); if (React.isValidElement(renderedOutput)) { const props = renderedOutput.props as { children?: React.ReactNode }; return String(props.children ?? ''); } return String(renderedOutput ?? ''); } return ''; };
     const handleConfirmExport = () => { const columnsToExport = availableColumns.filter(col => col.id && 'header' in col && col.header && selectedColumns[col.id]); if (columnsToExport.length === 0) return toast.error("Selecione pelo menos uma coluna para exportar."); const headers = columnsToExport.map(col => String('header' in col ? col.header : '')); const data = enrichedData.map(row => columnsToExport.map(col => getExportValue(row, col)) ); if (exportType === 'pdf') { const doc = new jsPDF(); autoTable(doc, { head: [headers], body: data }); doc.save(`relatorio_${reportType}_${format(new Date(), 'dd-MM-yyyy')}.pdf`); } else { const escapeCsv = (str: string) => `"${String(str).replace(/"/g, '""')}"`; const csvContent = [ headers.join(','), ...data.map(row => row.map(escapeCsv).join(',')) ].join('\n'); const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }); saveAs(blob, `relatorio_${reportType}_${format(new Date(), 'dd-MM-yyyy')}.csv`); } setIsExportDialogOpen(false); };
     const openExportDialog = (type: ExportType) => { if (!enrichedData.length) return toast.error("Não há dados para exportar."); setExportType(type); setIsExportDialogOpen(true); };
 

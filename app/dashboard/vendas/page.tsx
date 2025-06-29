@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { useForm, useFieldArray, useWatch, Control } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Control, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { format } from 'date-fns';
+import { format } from "date-fns";
 import { IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconAlertTriangle, IconLock, IconPencil, IconFileInvoice } from "@tabler/icons-react";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 import { Venda, ItemVendido, vendaSchema } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
-import { z } from "zod";
+import z from "zod";
 
 const itemVendidoFormSchema = z.object({
     produtoId: z.string(),
@@ -57,7 +57,7 @@ const defaultFormValues: VendaFormValues = {
     metodoPagamento: "",
     contaBancariaId: "",
     valorTotal: 0,
-    dataVencimento: undefined,
+    dataVencimento: new Date(),
     numeroParcelas: 1,
     taxaCartao: 0,
 };
@@ -89,7 +89,7 @@ const ItemProdutoVenda = ({ index, control, remove, handleProdutoChange, produto
             <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-start">
                 <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field }) => (
                     <FormItem>
-                        <Select onValueChange={(value) => handleProdutoChange(index, value)} value={field.value}>
+                        <Select onValueChange={(value) => {field.onChange(value); handleProdutoChange(index, value)}} value={field.value}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger></FormControl>
                             <SelectContent>
                                 {produtosParaVendaOptions.map(p => (
@@ -201,6 +201,10 @@ export default function VendasPage() {
             ...venda,
             data: venda.data,
             dataVencimento: venda.dataVencimento || undefined,
+            produtos: venda.produtos.map(p => ({
+                ...p,
+                estoqueDisponivel: produtos.find(prod => prod.id === p.produtoId)?.quantidade || 0
+            }))
         });
     };
 
@@ -251,7 +255,7 @@ export default function VendasPage() {
         }
     };
 
-    const onSubmit = async (values: VendaFormValues) => {
+    const onSubmit: SubmitHandler<VendaFormValues> = async (values) => {
         if (isEditing && editingId) {
             try {
                 await updateVenda(editingId, { ...values, valorFinal: valorFinalCalculado });
@@ -279,7 +283,7 @@ export default function VendasPage() {
 
     const handleEmitirNFe = (vendaId: string) => {
         toast.promise(
-            new Promise(resolve => setTimeout(resolve, 1500)), // Simula chamada de API
+            new Promise(resolve => setTimeout(resolve, 1500)),
             {
                 loading: `Emitindo NF-e para a venda ${vendaId.slice(0,5)}...`,
                 success: "NF-e emitida com sucesso! (Simulação)",
@@ -296,7 +300,6 @@ export default function VendasPage() {
     }, [vendas, clientes]);
 
     const columns: ColumnDef<VendaComDetalhes>[] = [
-        { id: 'expander', header: () => null, cell: ({ row }) => (<Button variant="ghost" size="icon" onClick={() => row.toggleExpanded()} className="h-8 w-8">{row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}</Button>) },
         { header: "Data", accessorKey: "data", cell: ({ row }) => format(row.original.data, 'dd/MM/yyyy') },
         { header: "Cliente", accessorKey: "clienteNome" },
         { header: "Registrado Por", accessorKey: "registradoPor.nome" },
@@ -343,7 +346,7 @@ export default function VendasPage() {
         dependenciasFaltantes.length > 0 ? (
             <Alert variant="destructive">
                 <IconAlertTriangle className="h-4 w-4" />
-                <AlertTitle>Cadastro de pré-requisitos necessário</AlertTitle>
+                <AlertTitle>Cadastro de pré-requisito necessário</AlertTitle>
                 <AlertDescription>
                     Para registrar uma venda, você precisa primeiro cadastrar:
                     <ul className="list-disc pl-5 mt-2">

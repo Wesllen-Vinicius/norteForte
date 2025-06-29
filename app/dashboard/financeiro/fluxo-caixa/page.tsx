@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -22,8 +22,8 @@ import { getMovimentacoesPorContaEPeriodo } from "@/lib/services/fluxoCaixa.serv
 const filterSchema = z.object({
     contaId: z.string().min(1, "Selecione uma conta."),
     periodo: z.object({
-        from: z.date(),
-        to: z.date(),
+        from: z.date({required_error: "A data de início é obrigatória."}),
+        to: z.date({required_error: "A data de fim é obrigatória."}),
     }).refine(data => data.from && data.to, { message: "Selecione um período válido." }),
 });
 
@@ -54,7 +54,7 @@ export default function FluxoCaixaPage() {
         contasBancarias.map(c => ({ label: `${c.nomeConta} (Banco: ${c.banco})`, value: c.id! })),
     [contasBancarias]);
 
-    const onSubmit = async (values: FilterFormValues) => {
+    const onSubmit: SubmitHandler<FilterFormValues> = async (values) => {
         setIsLoading(true);
         setMovimentacoes([]);
         setSaldoInicialPeriodo(null);
@@ -79,14 +79,16 @@ export default function FluxoCaixaPage() {
     };
 
     const columns: ColumnDef<MovimentacaoBancaria>[] = [
-        { header: "Data", cell: ({ row }) => format(row.original.data, 'dd/MM/yyyy HH:mm') },
+        { header: "Data", cell: ({ row }) => format(new Date(row.original.data), 'dd/MM/yyyy HH:mm') },
         { header: "Descrição", accessorKey: "motivo" },
-        { header: "Tipo", cell: ({ row }) => (
-            <Badge variant={row.original.tipo === 'credito' ? 'default' : 'destructive'} className="capitalize">
-                {row.original.tipo}
-            </Badge>
-        )},
-        { header: "Valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}` },
+        {
+            header: "Valor",
+            cell: ({ row }) => (
+                <span className={row.original.tipo === 'credito' ? 'text-green-600' : 'text-destructive'}>
+                   {row.original.tipo === 'credito' ? '+' : '-'} R$ {row.original.valor.toFixed(2)}
+                </span>
+            )
+        },
         { header: "Saldo", cell: ({ row }) => `R$ ${row.original.saldoNovo.toFixed(2)}` },
     ];
 
@@ -96,8 +98,8 @@ export default function FluxoCaixaPage() {
         <div className="container mx-auto py-8 px-4 md:px-6 space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle>Fluxo de Caixa / Extrato</CardTitle>
-                    <CardDescription>Selecione a conta e o período para visualizar as movimentações.</CardDescription>
+                    <CardTitle>Fluxo de Caixa / Extrato Bancário</CardTitle>
+                    <CardDescription>Selecione a conta e o período para visualizar as movimentações detalhadas.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>
@@ -108,7 +110,7 @@ export default function FluxoCaixaPage() {
                                 render={({ field }) => (
                                 <FormItem className="w-full sm:w-auto flex-1">
                                     <FormLabel>Conta Bancária</FormLabel>
-                                    <Combobox options={contasOptions} {...field} placeholder="Selecione uma conta" />
+                                    <Combobox options={contasOptions} {...field} placeholder="Selecione uma conta" searchPlaceholder="Buscar conta..."/>
                                     <FormMessage />
                                 </FormItem>
                                 )}
@@ -134,20 +136,22 @@ export default function FluxoCaixaPage() {
 
             {(movimentacoes.length > 0 || saldoInicialPeriodo !== null) && (
                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                         <div>
                              <CardTitle>Extrato do Período</CardTitle>
                              <CardDescription>
                                  Conta: {contasOptions.find(c => c.value === form.getValues('contaId'))?.label}
                              </CardDescription>
                         </div>
-                        <div className="text-right">
-                             <p className="text-sm text-muted-foreground">Saldo Inicial</p>
-                             <p className="font-bold text-lg">R$ {saldoInicialPeriodo?.toFixed(2)}</p>
-                        </div>
-                         <div className="text-right">
-                             <p className="text-sm text-muted-foreground">Saldo Final</p>
-                             <p className="font-bold text-lg text-primary">R$ {saldoFinalPeriodo?.toFixed(2)}</p>
+                        <div className="flex gap-4 sm:gap-8 text-right">
+                             <div>
+                                <p className="text-sm text-muted-foreground">Saldo Inicial</p>
+                                <p className="font-bold text-lg">R$ {saldoInicialPeriodo?.toFixed(2)}</p>
+                             </div>
+                             <div>
+                                <p className="text-sm text-muted-foreground">Saldo Final</p>
+                                <p className="font-bold text-lg text-primary">R$ {saldoFinalPeriodo?.toFixed(2)}</p>
+                             </div>
                         </div>
                     </CardHeader>
                     <CardContent>

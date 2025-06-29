@@ -1,12 +1,10 @@
 import { create } from 'zustand';
-import { Unsubscribe } from 'firebase/firestore'; // Importe o tipo Unsubscribe
+import { Unsubscribe } from 'firebase/firestore';
 
-// Importa todos os tipos e schemas do local centralizado
 import {
-    Cliente, Produto, Funcionario, Cargo, Unidade, Categoria, Fornecedor, Abate, Producao, Venda, Compra, Meta, SystemUser, ContaBancaria, DespesaOperacional
+    Cliente, Produto, Funcionario, Cargo, Unidade, Categoria, Fornecedor, Abate, Producao, Venda, Compra, Meta, SystemUser, ContaBancaria, DespesaOperacional, Movimentacao
 } from '@/lib/schemas';
 
-// Importa todas as funções de subscribe
 import { subscribeToClientes } from '@/lib/services/clientes.services';
 import { subscribeToProdutos } from '@/lib/services/produtos.services';
 import { subscribeToFuncionarios } from '@/lib/services/funcionarios.services';
@@ -23,6 +21,7 @@ import { subscribeToUsers } from '@/lib/services/user.services';
 import { subscribeToContasBancarias } from '@/lib/services/contasBancarias.services';
 import { subscribeToDespesas } from '@/lib/services/despesas.services';
 import { subscribeToContasAPagar } from '@/lib/services/contasAPagar.services';
+import { subscribeToMovimentacoes } from '@/lib/services/estoque.services';
 
 interface DataState {
   clientes: Cliente[];
@@ -41,14 +40,14 @@ interface DataState {
   contasBancarias: ContaBancaria[];
   despesas: DespesaOperacional[];
   contasAPagar: any[];
+  movimentacoes: Movimentacao[];
   isInitialized: boolean;
-  unsubscribers: Unsubscribe[]; // Array para guardar as funções de unsubscribe
+  unsubscribers: Unsubscribe[];
   initializeSubscribers: () => void;
-  clearSubscribers: () => void; // Nova função para limpar os listeners
+  clearSubscribers: () => void;
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
-  // ... (estados existentes)
   clientes: [],
   produtos: [],
   funcionarios: [],
@@ -65,8 +64,9 @@ export const useDataStore = create<DataState>((set, get) => ({
   contasBancarias: [],
   despesas: [],
   contasAPagar: [],
+  movimentacoes: [],
   isInitialized: false,
-  unsubscribers: [], // Inicia o array vazio
+  unsubscribers: [],
 
   initializeSubscribers: () => {
     if (get().isInitialized) return;
@@ -75,7 +75,6 @@ export const useDataStore = create<DataState>((set, get) => ({
 
     const newUnsubscribers: Unsubscribe[] = [];
 
-    // Guarda cada função de unsubscribe no array
     newUnsubscribers.push(subscribeToClientes((data) => set({ clientes: data })));
     newUnsubscribers.push(subscribeToProdutos((data) => set({ produtos: data })));
     newUnsubscribers.push(subscribeToFuncionarios((data) => set({ funcionarios: data })));
@@ -92,13 +91,14 @@ export const useDataStore = create<DataState>((set, get) => ({
     newUnsubscribers.push(subscribeToContasBancarias((data) => set({ contasBancarias: data })));
     newUnsubscribers.push(subscribeToDespesas((data) => set({ despesas: data })));
     newUnsubscribers.push(subscribeToContasAPagar((data) => set({ contasAPagar: data })));
+    newUnsubscribers.push(subscribeToMovimentacoes((data) => set({ movimentacoes: data })));
 
     set({ isInitialized: true, unsubscribers: newUnsubscribers });
   },
 
   clearSubscribers: () => {
     console.log("Limpando todos os listeners de dados...");
-    get().unsubscribers.forEach((unsub) => unsub()); // Chama cada função de unsubscribe
-    set({ isInitialized: false, unsubscribers: [] }); // Reseta o estado
+    get().unsubscribers.forEach((unsub) => unsub());
+    set({ isInitialized: false, unsubscribers: [] });
   },
 }));

@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { DetailsSubRow } from "@/components/details-sub-row";
 import {
     Produto,
     produtoVendaSchema,
@@ -35,7 +36,7 @@ type FormType = "VENDA" | "USO_INTERNO" | "MATERIA_PRIMA";
 
 export default function ProdutosPage() {
     const { produtos, unidades, categorias } = useDataStore();
-    const { role } = useAuthStore();
+    const { user, role } = useAuthStore();
 
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [currentForm, setCurrentForm] = useState<FormType | null>(null);
@@ -60,21 +61,6 @@ export default function ProdutosPage() {
         usoInterno: !categorias || categorias.length === 0,
         materiaPrima: !unidades || unidades.length === 0,
     }), [unidades, categorias]);
-
-    const produtosComNomes = useMemo(() => {
-        return produtos.map(p => {
-            if (p.tipoProduto === 'VENDA' && p.unidadeId) {
-                return { ...p, unidadeNome: unidades.find(u => u.id === p.unidadeId)?.sigla };
-            }
-            if (p.tipoProduto === 'USO_INTERNO' && p.categoriaId) {
-                return { ...p, categoriaNome: categorias.find(c => c.id === p.categoriaId)?.nome };
-            }
-             if (p.tipoProduto === 'MATERIA_PRIMA' && p.unidadeId) {
-                return { ...p, unidadeNome: unidades.find(u => u.id === p.unidadeId)?.sigla };
-            }
-            return p;
-        });
-    }, [produtos, unidades, categorias]);
 
     const handleEdit = (produto: Produto) => {
         setIsEditing(true);
@@ -124,6 +110,27 @@ export default function ProdutosPage() {
         }
     };
 
+    const renderSubComponent = useCallback(({ row }: { row: Row<Produto> }) => {
+        const produto = row.original;
+        let details = [];
+
+        if (produto.tipoProduto === "VENDA") {
+            details = [
+                { label: "NCM", value: produto.ncm },
+                { label: "CFOP", value: produto.cfop },
+                { label: "CEST", value: produto.cest || 'N/A' },
+                { label: "SKU", value: produto.sku || 'N/A' }
+            ];
+        } else if (produto.tipoProduto === "USO_INTERNO") {
+             const categoria = categorias.find(c => c.id === produto.categoriaId);
+             details = [ { label: "Categoria", value: categoria?.nome || 'N/A' }];
+        } else {
+             return <div className="p-4 text-sm text-muted-foreground">Não há detalhes fiscais para este tipo de produto.</div>;
+        }
+
+        return <DetailsSubRow details={details} />;
+    }, [categorias]);
+
     const columns: ColumnDef<Produto>[] = [
         { accessorKey: "nome", header: "Descrição" },
         {
@@ -138,10 +145,10 @@ export default function ProdutosPage() {
         },
         {
             id: "detalhes",
-            header: "Detalhes",
+            header: "Preço / Custo",
             cell: ({ row }) => {
                 const p = row.original;
-                if (p.tipoProduto === "VENDA") return `Preço: R$ ${p.precoVenda.toFixed(2)} | Custo: R$ ${(p.custoUnitario || 0).toFixed(2)}`;
+                if (p.tipoProduto === "VENDA") return `Venda: R$ ${p.precoVenda.toFixed(2)} | Custo: R$ ${(p.custoUnitario || 0).toFixed(2)}`;
                 if (p.tipoProduto === "USO_INTERNO" || p.tipoProduto === "MATERIA_PRIMA") return `Custo: R$ ${p.custoUnitario.toFixed(2)}`;
                 return null;
             },
@@ -152,7 +159,7 @@ export default function ProdutosPage() {
             cell: ({ row }) => {
                 const item = row.original;
                 const createdAt = item.createdAt as Timestamp | undefined;
-                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date().getTime() - createdAt.toDate().getTime()) < 2 * 60 * 60 * 1000 : false);
 
                 return (
                     <div className="text-right">
@@ -202,9 +209,9 @@ export default function ProdutosPage() {
             <Select onValueChange={(value) => setCurrentForm(value as FormType)}>
                 <SelectTrigger><SelectValue placeholder="Selecione o tipo de produto para cadastrar" /></SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="MATERIA_PRIMA" disabled={dependencias.materiaPrima}>Matéria-Prima</SelectItem>
-                    <SelectItem value="VENDA" disabled={dependencias.venda}>Produto para Venda</SelectItem>
-                    <SelectItem value="USO_INTERNO" disabled={dependencias.usoInterno}>Item de Uso Interno</SelectItem>
+                    <SelectItem value="MATERIA_PRIMA">Matéria-Prima</SelectItem>
+                    <SelectItem value="VENDA">Produto para Venda</SelectItem>
+                    <SelectItem value="USO_INTERNO">Item de Uso Interno</SelectItem>
                 </SelectContent>
             </Select>
           )}
@@ -277,9 +284,10 @@ export default function ProdutosPage() {
     const tableContent = (
         <GenericTable
             columns={columns}
-            data={produtosComNomes}
+            data={produtos}
             filterPlaceholder="Filtrar por descrição..."
             filterColumnId="nome"
+            renderSubComponent={renderSubComponent}
         />
     );
 

@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { onSnapshot, collection, doc, updateDoc, Timestamp } from "firebase/firestore";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
@@ -17,13 +17,15 @@ import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 import { subscribeToContasAReceber, receberPagamento } from "@/lib/services/contasAReceber.services";
 import { ContaAReceber } from "@/lib/schemas";
+import { DetailsSubRow } from "@/components/details-sub-row";
+import Link from "next/link";
 
 type ContaComNome = ContaAReceber & { clienteNome?: string };
 
 export default function ContasAReceberPage() {
     const [contas, setContas] = useState<ContaAReceber[]>([]);
     const { clientes, contasBancarias } = useDataStore();
-    const { user } = useAuthStore();
+    const { user, role } = useAuthStore();
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedConta, setSelectedConta] = useState<ContaAReceber | null>(null);
@@ -33,8 +35,8 @@ export default function ContasAReceberPage() {
         const unsubContas = subscribeToContasAReceber((data) => {
             const contasComDataConvertida = data.map(c => ({
                 ...c,
-                dataEmissao: (c.dataEmissao as Timestamp).toDate(),
-                dataVencimento: (c.dataVencimento as Timestamp).toDate()
+                dataEmissao: c.dataEmissao instanceof Timestamp ? c.dataEmissao.toDate() : c.dataEmissao,
+                dataVencimento: c.dataVencimento instanceof Timestamp ? c.dataVencimento.toDate() : c.dataVencimento
             }));
             setContas(contasComDataConvertida);
         });
@@ -72,9 +74,18 @@ export default function ContasAReceberPage() {
         }));
     }, [contas, clientes]);
 
+    const renderSubComponent = useCallback(({ row }: { row: Row<ContaComNome> }) => {
+        const conta = row.original;
+        const details = [
+            { label: "Data de Emissão", value: format(new Date(conta.dataEmissao), 'dd/MM/yyyy') },
+            { label: "Venda de Origem", value: <Button asChild variant="link" size="sm" className="p-0 h-auto"><Link href={`/dashboard/vendas?vendaId=${conta.vendaId}`}>Ver Venda</Link></Button> },
+            { label: "ID da Conta", value: conta.id, className: "col-span-1 sm:col-span-2" },
+        ];
+        return <DetailsSubRow details={details} />;
+    }, []);
+
     const columns: ColumnDef<ContaComNome>[] = [
         { header: "Cliente", accessorKey: "clienteNome" },
-        { header: "Emissão", accessorKey: "dataEmissao", cell: ({ row }) => format(row.original.dataEmissao, 'dd/MM/yyyy') },
         { header: "Vencimento", accessorKey: "dataVencimento", cell: ({ row }) => row.original.dataVencimento ? format(row.original.dataVencimento, 'dd/MM/yyyy') : 'N/A' },
         { header: "Valor", accessorKey: "valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}`},
         { header: "Status", accessorKey: "status", cell: ({ row }) => (
@@ -84,7 +95,7 @@ export default function ContasAReceberPage() {
         )},
         { id: "actions", cell: ({ row }) => (
             <div className="text-right">
-                {row.original.status === 'Pendente' && (
+                {row.original.status === 'Pendente' && role === "ADMINISTRADOR" && (
                     <Button size="sm" onClick={() => handleOpenDialog(row.original)}>Dar Baixa (Receber)</Button>
                 )}
             </div>
@@ -98,20 +109,21 @@ export default function ContasAReceberPage() {
                     <DialogHeader>
                         <DialogTitle>Confirmar Recebimento</DialogTitle>
                     </DialogHeader>
-                    <div className="py-4 space-y-2">
-                         <p>Confirme a baixa para a conta:</p>
-                         <p className="font-semibold text-lg">R$ {selectedConta?.valor.toFixed(2)}</p>
-                         <Label htmlFor="conta-bancaria">Selecione a conta de destino do recebimento</Label>
-                         <Select onValueChange={setSelectedContaBancaria} value={selectedContaBancaria}>
-                            <SelectTrigger id="conta-bancaria">
-                                <SelectValue placeholder="Selecione a conta..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {contasBancarias.map(conta => (
-                                    <SelectItem key={conta.id} value={conta.id!}>{conta.nomeConta}</SelectItem>
-                                ))}
-                            </SelectContent>
-                         </Select>
+                    <div className="py-4 space-y-4">
+                         <p>Confirme a baixa para a conta no valor de <span className="font-semibold text-lg">R$ {selectedConta?.valor.toFixed(2)}</span>.</p>
+                         <div className="space-y-2">
+                            <Label htmlFor="conta-bancaria">Selecione a conta de destino do recebimento</Label>
+                             <Select onValueChange={setSelectedContaBancaria} value={selectedContaBancaria}>
+                                <SelectTrigger id="conta-bancaria">
+                                    <SelectValue placeholder="Selecione a conta..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {contasBancarias.map(conta => (
+                                        <SelectItem key={conta.id} value={conta.id!}>{`${conta.nomeConta} (Saldo: R$ ${conta.saldoAtual?.toFixed(2)})`}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
+                         </div>
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
@@ -131,6 +143,7 @@ export default function ContasAReceberPage() {
                         data={contasComCliente}
                         filterPlaceholder="Pesquisar por cliente..."
                         filterColumnId="clienteNome"
+                        renderSubComponent={renderSubComponent}
                     />
                 </CardContent>
             </Card>

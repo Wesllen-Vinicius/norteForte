@@ -75,8 +75,8 @@ export default function UnidadesPage() {
             id: "actions",
             cell: ({ row }) => {
                 const item = row.original;
-                const createdAt = item.createdAt as Timestamp | undefined;
-                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+                // CORREÇÃO: Administradores podem sempre editar.
+                const isEditable = role === 'ADMINISTRADOR';
 
                 return (
                     <div className="text-right">
@@ -98,10 +98,10 @@ export default function UnidadesPage() {
         <GenericForm schema={unidadeSchema} onSubmit={onSubmit} formId="unidade-form" form={form}>
             <div className="space-y-4">
                 <FormField name="nome" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Nome da Unidade</FormLabel><FormControl><Input placeholder="Ex: Quilograma" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Nome da Unidade</FormLabel><FormControl><Input placeholder="Ex: Quilograma, Litro, Pacote" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField name="sigla" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Sigla</FormLabel><FormControl><Input placeholder="Ex: kg" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Sigla</FormLabel><FormControl><Input placeholder="Ex: kg, lt, pct" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
             </div>
             <div className="flex justify-end gap-2 pt-6">

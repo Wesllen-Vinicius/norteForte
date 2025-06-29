@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
-import { Timestamp } from "firebase/firestore";
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
@@ -73,8 +72,8 @@ export default function CategoriasPage() {
             id: "actions",
             cell: ({ row }) => {
                 const item = row.original;
-                const createdAt = item.createdAt as Timestamp | undefined;
-                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+                // CORREÇÃO: Administradores podem sempre editar.
+                const isEditable = role === 'ADMINISTRADOR';
 
                 return (
                     <div className="text-right">
@@ -96,7 +95,7 @@ export default function CategoriasPage() {
         <GenericForm schema={categoriaSchema} onSubmit={onSubmit} formId="categoria-form" form={form}>
             <div className="space-y-4">
                 <FormField name="nome" control={form.control} render={({ field }) => (
-                    <FormItem><FormLabel>Nome da Categoria</FormLabel><FormControl><Input placeholder="Ex: Higiene, Ferramentas" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>Nome da Categoria</FormLabel><FormControl><Input placeholder="Ex: Higiene, Ferramentas, Escritório" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
             </div>
             <div className="flex justify-end gap-2 pt-6">

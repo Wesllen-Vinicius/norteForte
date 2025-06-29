@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
-import { ColumnDef } from "@tanstack/react-table";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useDataStore } from "@/store/data.store";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { subscribeToContasAPagar, pagarConta } from "@/lib/services/contasAPagar.services";
+import { DetailsSubRow } from "@/components/details-sub-row";
 
 interface ContaAPagar {
     id: string;
@@ -22,15 +23,17 @@ interface ContaAPagar {
     valor: number;
     dataEmissao: Date;
     dataVencimento: Date;
-    condicaoPagamento: string;
+    parcela: string;
     status: 'Pendente' | 'Paga';
     despesaId?: string;
 }
 
+type ContaComNome = ContaAPagar & { fornecedorNome?: string };
+
 export default function ContasAPagarPage() {
     const [contas, setContas] = useState<ContaAPagar[]>([]);
     const { fornecedores, contasBancarias } = useDataStore();
-    const { user } = useAuthStore();
+    const { user, role } = useAuthStore();
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedConta, setSelectedConta] = useState<ContaAPagar | null>(null);
@@ -69,13 +72,23 @@ export default function ContasAPagarPage() {
             ...conta,
             fornecedorNome: conta.fornecedorId === 'despesa_operacional'
                 ? `Despesa: ${conta.notaFiscal}`
-                : fornecedores.find(f => f.id === conta.fornecedorId)?.razaoSocial || "N/A"
+                : fornecedores.find(f => f.id === conta.fornecedorId)?.razaoSocial || "Desconhecido"
         }));
     }, [contas, fornecedores]);
 
-    const columns: ColumnDef<typeof contasComFornecedor[0]>[] = [
+    const renderSubComponent = useCallback(({ row }: { row: Row<ContaComNome> }) => {
+        const conta = row.original;
+        const details = [
+            { label: "Data de Emissão", value: format(new Date(conta.dataEmissao), 'dd/MM/yyyy') },
+            { label: "NF / Categoria", value: conta.notaFiscal },
+            { label: "Parcela", value: conta.parcela || '1/1' },
+            { label: "ID da Conta", value: conta.id, className: "col-span-1 sm:col-span-2 md:col-span-3 lg:col-span-4" },
+        ];
+        return <DetailsSubRow details={details} />;
+    }, []);
+
+    const columns: ColumnDef<ContaComNome>[] = [
         { header: "Fornecedor / Despesa", accessorKey: "fornecedorNome" },
-        { header: "NF / Categoria", accessorKey: "notaFiscal" },
         { header: "Vencimento", accessorKey: "dataVencimento", cell: ({ row }) => format(row.original.dataVencimento, 'dd/MM/yyyy') },
         { header: "Valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}`},
         { header: "Status", cell: ({ row }) => (
@@ -85,7 +98,7 @@ export default function ContasAPagarPage() {
         )},
         { id: "actions", cell: ({ row }) => (
             <div className="text-right">
-                {row.original.status === 'Pendente' && (
+                {row.original.status === 'Pendente' && role === 'ADMINISTRADOR' && (
                     <Button size="sm" onClick={() => handleOpenDialog(row.original)}>Dar Baixa (Pagar)</Button>
                 )}
             </div>
@@ -99,20 +112,21 @@ export default function ContasAPagarPage() {
                     <DialogHeader>
                         <DialogTitle>Confirmar Pagamento</DialogTitle>
                     </DialogHeader>
-                    <div className="py-4 space-y-2">
-                         <p>Confirme a baixa para a conta:</p>
-                         <p className="font-semibold text-lg">R$ {selectedConta?.valor.toFixed(2)}</p>
-                         <Label htmlFor="conta-bancaria">Selecione a conta de origem do pagamento</Label>
-                         <Select onValueChange={setSelectedContaBancaria} value={selectedContaBancaria}>
-                            <SelectTrigger id="conta-bancaria">
-                                <SelectValue placeholder="Selecione a conta..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {contasBancarias.map(conta => (
-                                    <SelectItem key={conta.id} value={conta.id!}>{conta.nomeConta}</SelectItem>
-                                ))}
-                            </SelectContent>
-                         </Select>
+                    <div className="py-4 space-y-4">
+                         <p>Confirme a baixa para a conta no valor de <span className="font-semibold text-lg">R$ {selectedConta?.valor.toFixed(2)}</span>.</p>
+                         <div className="space-y-2">
+                            <Label htmlFor="conta-bancaria">Selecione a conta de origem do pagamento</Label>
+                             <Select onValueChange={setSelectedContaBancaria} value={selectedContaBancaria}>
+                                <SelectTrigger id="conta-bancaria">
+                                    <SelectValue placeholder="Selecione a conta..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {contasBancarias.map(conta => (
+                                        <SelectItem key={conta.id} value={conta.id!}>{`${conta.nomeConta} (Saldo: R$ ${conta.saldoAtual?.toFixed(2)})`}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
+                         </div>
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
@@ -132,6 +146,7 @@ export default function ContasAPagarPage() {
                         data={contasComFornecedor}
                         filterPlaceholder="Filtrar por fornecedor ou despesa..."
                         filterColumnId="fornecedorNome"
+                        renderSubComponent={renderSubComponent}
                     />
                 </CardContent>
             </Card>

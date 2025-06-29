@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useMemo, useCallback } from "react";
+import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
-import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
 
 import { CrudLayout } from "@/components/crud-layout";
@@ -17,19 +16,18 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/comp
 import { Input } from "@/components/ui/input";
 import { Meta, metaSchema } from "@/lib/schemas";
 import { addMeta, updateMeta, setMetaStatus } from "@/lib/services/metas.services";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 import z from "zod";
+import { DetailsSubRow } from "@/components/details-sub-row";
 
 type MetaFormValues = z.infer<typeof metaSchema>;
-type MetaComDetalhes = Meta & { produtoNome?: string, unidade?: string };
+type MetaComDetalhes = Meta & { produtoNome?: string; unidade?: string };
 
 export default function MetasPage() {
-    const metas = useDataStore((state) => state.metas);
-    const produtos = useDataStore((state) => state.produtos);
-    const unidades = useDataStore((state) => state.unidades);
+    const { metas, produtos, unidades } = useDataStore();
     const { role } = useAuthStore();
     const [isEditing, setIsEditing] = useState<boolean>(false);
 
@@ -38,20 +36,24 @@ export default function MetasPage() {
         defaultValues: { produtoId: "", metaPorAnimal: 0 },
     });
 
-    const produtosParaVenda = useMemo(() => produtos.filter(p => p.tipoProduto === 'VENDA'), [produtos]);
+    const produtosParaVendaOptions = useMemo(() =>
+        produtos
+            .filter(p => p.tipoProduto === 'VENDA')
+            .map(p => ({ label: p.nome, value: p.id! })),
+    [produtos]);
 
     const dependenciasFaltantes = useMemo(() => {
-        if (produtosParaVenda.length === 0) {
+        if (produtos.filter(p => p.tipoProduto === 'VENDA').length === 0) {
             return [{ nome: "Produtos de Venda", link: "/dashboard/produtos" }];
         }
         return [];
-    }, [produtosParaVenda]);
+    }, [produtos]);
 
     const metasComDetalhes: MetaComDetalhes[] = useMemo(() => {
         return metas.map((meta: Meta) => {
             const produtoAssociado = produtos.find(p => p.id === meta.produtoId);
             let unidadeNome = "N/A";
-            if (produtoAssociado && produtoAssociado.tipoProduto === 'VENDA' && produtoAssociado.unidadeId) {
+            if (produtoAssociado?.tipoProduto === 'VENDA' && produtoAssociado.unidadeId) {
                 unidadeNome = unidades.find(u => u.id === produtoAssociado.unidadeId)?.sigla || "N/A";
             }
 
@@ -83,7 +85,7 @@ export default function MetasPage() {
         setIsEditing(false);
     };
 
-    const onSubmit = async (values: MetaFormValues) => {
+    const onSubmit: SubmitHandler<MetaFormValues> = async (values) => {
         try {
             const { id, ...data } = values;
             if (isEditing && id) {
@@ -99,27 +101,30 @@ export default function MetasPage() {
         }
     };
 
+    const renderSubComponent = useCallback(({ row }: { row: Row<MetaComDetalhes> }) => {
+        const meta = row.original;
+        const details = [
+            { label: "Unidade", value: meta.unidade }
+        ];
+        return <DetailsSubRow details={details} />;
+    }, []);
+
     const columns: ColumnDef<MetaComDetalhes>[] = [
         { accessorKey: "produtoNome", header: "Produto" },
         { accessorKey: "metaPorAnimal", header: "Meta por Animal" },
-        { accessorKey: "unidade", header: "Unidade" },
         {
             id: "actions",
             cell: ({ row }) => {
-                const item = row.original;
-                const createdAt = item.createdAt as Timestamp | undefined;
-                const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+                const isEditable = role === 'ADMINISTRADOR';
 
                 return (
                     <div className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={!isEditable}>
                             <IconPencil className="h-4 w-4" />
                         </Button>
-                        {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id!)}>
-                                <IconTrash className="h-4 w-4" />
-                            </Button>
-                        )}
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id!)} disabled={!isEditable}>
+                            <IconTrash className="h-4 w-4" />
+                        </Button>
                     </div>
                 );
             }
@@ -153,16 +158,19 @@ export default function MetasPage() {
                         render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Produto</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Selecione um produto" /></SelectTrigger></FormControl>
-                                    <SelectContent>{produtosParaVenda.map(p => <SelectItem key={p.id} value={p.id!}>{p.nome}</SelectItem>)}</SelectContent>
-                                </Select>
+                                <Combobox
+                                    options={produtosParaVendaOptions}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    placeholder="Selecione um produto de venda"
+                                    searchPlaceholder="Buscar produto..."
+                                />
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
                      <FormField name="metaPorAnimal" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>Meta por Animal</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Meta por Animal</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                 </div>
                 <div className="flex justify-end gap-2 pt-6">
@@ -179,6 +187,7 @@ export default function MetasPage() {
             data={metasComDetalhes}
             filterPlaceholder="Filtrar por produto..."
             filterColumnId="produtoNome"
+            renderSubComponent={renderSubComponent}
         />
     );
 

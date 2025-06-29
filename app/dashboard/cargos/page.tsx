@@ -24,7 +24,7 @@ type CargoFormValues = z.infer<typeof cargoSchema>;
 
 export default function CargosPage() {
   const cargos = useDataStore((state) => state.cargos);
-  const { role } = useAuthStore();
+  const { user, role } = useAuthStore();
   const [isEditing, setIsEditing] = useState<boolean>(false);
 
   const form = useForm<CargoFormValues>({
@@ -76,8 +76,8 @@ export default function CargosPage() {
       id: "actions",
       cell: ({ row }) => {
         const item = row.original;
-        const createdAt = item.createdAt as Timestamp | undefined;
-        const isEditable = role === 'ADMINISTRADOR' || (createdAt ? (new Date(Date.now() - 2 * 60 * 60 * 1000) < createdAt.toDate()) : false);
+        // CORREÇÃO: Administradores podem sempre editar.
+        const isEditable = role === 'ADMINISTRADOR';
 
         return (
           <div className="text-right">
@@ -109,7 +109,7 @@ export default function CargosPage() {
           <FormItem>
             <FormLabel>Nome do Cargo</FormLabel>
             <FormControl>
-              <Input placeholder="Ex: Açougueiro, Gerente" {...field} />
+              <Input placeholder="Ex: Açougueiro, Gerente de Produção" {...field} />
             </FormControl>
             <FormMessage />
           </FormItem>

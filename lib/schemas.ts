@@ -181,7 +181,7 @@ export const compraSchema = z.object({
   itens: z.array(itemCompradoSchema).min(1, "Adicione pelo menos um item."),
   valorTotal: z.coerce.number(),
   contaBancariaId: z.string().min(1, "A conta de origem é obrigatória."),
-  condicaoPagamento: z.string({ required_error: "Selecione a condição." }).refine(val => val === 'A_VISTA' || val === 'A_PRAZO'),
+  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
   numeroParcelas: z.coerce.number().min(1, "Pelo menos uma parcela é necessária.").optional(),
   dataPrimeiroVencimento: z.date().optional(),
   createdAt: z.any().optional(),
@@ -253,7 +253,7 @@ export const vendaSchema = z.object({
   data: z.date({ required_error: "A data é obrigatória." }),
   produtos: z.array(itemVendidoSchema).min(1, "Adicione pelo menos um produto à venda."),
   valorTotal: z.coerce.number().min(0, "O valor total não pode ser negativo."),
-  condicaoPagamento: z.string({ required_error: "Selecione a condição." }).refine(val => val === 'A_VISTA' || val === 'A_PRAZO'),
+  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
   metodoPagamento: z.string({ required_error: "O método de pagamento é obrigatório." }).min(1, "O método de pagamento é obrigatório."),
   contaBancariaId: z.string().optional(),
   numeroParcelas: z.coerce.number().optional(),
@@ -272,12 +272,17 @@ export type Venda = z.infer<typeof vendaSchema>;
 // =================================================================
 
 export const movimentacaoSchema = z.object({
+  id: z.string().optional(),
   produtoId: z.string().min(1, "Selecione um produto."),
   produtoNome: z.string(),
   quantidade: z.number().positive("A quantidade deve ser maior que zero."),
   tipo: z.enum(["entrada", "saida"]),
   motivo: z.string().optional(),
-  data: z.date().optional(),
+  data: z.any().optional(),
+  registradoPor: z.object({
+      uid: z.string(),
+      nome: z.string().nullable()
+  }).optional(),
 });
 export type Movimentacao = z.infer<typeof movimentacaoSchema>;
 

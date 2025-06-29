@@ -1,8 +1,10 @@
 import { db } from "@/lib/firebase";
-import { collection,doc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp, onSnapshot, query, orderBy, DocumentData, QuerySnapshot, Timestamp } from "firebase/firestore";
 import { Movimentacao } from "@/lib/schemas";
 
-export const registrarMovimentacao = async (movimentacao: Omit<Movimentacao, 'data'>) => {
+type MovimentacaoPayload = Omit<Movimentacao, 'id' | 'data' | 'registradoPor'>;
+
+export const registrarMovimentacao = async (movimentacao: MovimentacaoPayload, user: { uid: string, nome: string | null }) => {
   const produtoDocRef = doc(db, "produtos", movimentacao.produtoId);
   const movimentacoesCollectionRef = collection(db, "movimentacoesEstoque");
 
@@ -31,6 +33,7 @@ export const registrarMovimentacao = async (movimentacao: Omit<Movimentacao, 'da
       const movimentacaoComData = {
         ...movimentacao,
         data: serverTimestamp(),
+        registradoPor: user,
       };
       transaction.set(doc(movimentacoesCollectionRef), movimentacaoComData);
     });
@@ -38,4 +41,21 @@ export const registrarMovimentacao = async (movimentacao: Omit<Movimentacao, 'da
     console.error("Erro na transação de estoque: ", e);
     throw e;
   }
+};
+
+
+export const subscribeToMovimentacoes = (callback: (movs: Movimentacao[]) => void) => {
+    const q = query(collection(db, "movimentacoesEstoque"), orderBy("data", "desc"));
+
+    return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+      const movimentacoes: Movimentacao[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        movimentacoes.push({
+            id: doc.id,
+            ...data,
+        } as Movimentacao);
+      });
+      callback(movimentacoes);
+    });
 };

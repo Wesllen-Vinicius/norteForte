@@ -139,7 +139,7 @@ export default function FuncionariosPage() {
     const renderSubComponent = useCallback(({ row }: { row: Row<Funcionario> }) => {
         const prestador = row.original;
         const details = [
-            { label: "CPF", value: prestador.cpf },
+            { label: "CPF", value: prestador.cpf || 'N/A' },
             { label: "Banco", value: prestador.banco },
             { label: "Agência", value: prestador.agencia },
             { label: "Conta", value: prestador.conta },
@@ -156,17 +156,16 @@ export default function FuncionariosPage() {
             id: "actions",
             cell: ({ row }) => {
                 const prestador = row.original;
+                // CORREÇÃO: Somente administradores podem editar/inativar
                 const isEditable = role === 'ADMINISTRADOR';
                 return (
                     <div className="text-right">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(prestador)} disabled={!isEditable}>
                             <IconPencil className="h-4 w-4" />
                         </Button>
-                        {role === 'ADMINISTRADOR' && (
-                           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(prestador.id!)}>
-                               <IconTrash className="h-4 w-4" />
-                           </Button>
-                        )}
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(prestador.id!)} disabled={!isEditable}>
+                           <IconTrash className="h-4 w-4" />
+                       </Button>
                     </div>
                 );
             }
