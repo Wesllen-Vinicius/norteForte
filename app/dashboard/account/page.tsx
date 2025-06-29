@@ -11,6 +11,7 @@ import { GenericForm } from "@/components/generic-form";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { updateUserProfile, uploadProfileImage, changeUserPassword } from "@/lib/services/user.services";
 import { useState, useEffect, ChangeEvent, forwardRef } from "react";
@@ -37,7 +38,7 @@ FileInput.displayName = "FileInput";
 
 
 export default function AccountPage() {
-    const { user } = useAuthStore();
+    const { user, role } = useAuthStore(); // Adicionado 'role'
     const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [isSavingPassword, setIsSavingPassword] = useState(false);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -108,6 +109,36 @@ export default function AccountPage() {
     return (
         <CenteredLayout>
             <div className="space-y-8">
+                {/* NOVO CARD DE INFORMAÇÕES DO USUÁRIO PARA TESTE */}
+                <Card className="border-primary/20">
+                    <CardHeader>
+                        <CardTitle>Informações de Autenticação (Teste)</CardTitle>
+                        <CardDescription>
+                            Dados recuperados do sistema para o seu usuário. Verifique se a sua <strong>Função</strong> está correta.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        <div>
+                            <p className="text-sm font-semibold">Função (Role)</p>
+                            <Badge variant={role === 'ADMINISTRADOR' ? 'default' : 'secondary'}>
+                                {role || "Não definida"}
+                            </Badge>
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold">Email</p>
+                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                        </div>
+                         <div>
+                            <p className="text-sm font-semibold">Nome de Exibição</p>
+                            <p className="text-sm text-muted-foreground">{user.displayName}</p>
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold">UID do Usuário</p>
+                            <p className="text-sm text-muted-foreground break-all">{user.uid}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader>
                         <CardTitle>Meu Perfil</CardTitle>

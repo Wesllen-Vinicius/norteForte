@@ -5,8 +5,9 @@ import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { IconPencil, IconTrash, IconSearch, IconLoader, IconFileDollar } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconSearch, IconLoader, IconFileDollar, IconRefresh, IconLock } from "@tabler/icons-react";
 import Link from "next/link";
+import { Unsubscribe } from "firebase/firestore";
 
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { Cliente, clienteSchema, ContaAReceber } from "@/lib/schemas";
-import { addCliente, updateCliente, setClienteStatus } from "@/lib/services/clientes.services";
+import { addCliente, updateCliente, setClienteStatus, subscribeToClientesByStatus } from "@/lib/services/clientes.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import z from "zod";
@@ -28,6 +29,8 @@ import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DetailsSubRow } from "@/components/details-sub-row";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const formSchema = clienteSchema.superRefine((data, ctx) => {
     if (data.tipoPessoa === 'fisica' && data.documento && !isValidCpf(data.documento)) {
@@ -39,6 +42,7 @@ const formSchema = clienteSchema.superRefine((data, ctx) => {
 });
 
 type ClienteFormValues = z.infer<typeof formSchema>;
+type StatusFiltro = "ativo" | "inativo";
 
 const defaultFormValues: DefaultValues<ClienteFormValues> = {
     nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "", inscricaoEstadual: "",
@@ -46,12 +50,19 @@ const defaultFormValues: DefaultValues<ClienteFormValues> = {
 };
 
 export default function ClientesPage() {
-    const { clientes, vendas } = useDataStore();
+    const { vendas } = useDataStore();
+    const [clientes, setClientes] = useState<Cliente[]>([]);
+    const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("ativo");
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
     const { role } = useAuthStore();
+
+    useEffect(() => {
+        const unsubscribe: Unsubscribe = subscribeToClientesByStatus(statusFiltro, setClientes);
+        return () => unsubscribe();
+    }, [statusFiltro]);
 
     const form = useForm<ClienteFormValues>({
         resolver: zodResolver(formSchema),
@@ -97,7 +108,18 @@ export default function ClientesPage() {
 
     const handleOpenModal = useCallback((cliente: Cliente) => { setSelectedClient(cliente); setIsModalOpen(true); }, []);
     const handleEdit = (cliente: Cliente) => { form.reset(cliente); setIsEditing(true); };
-    const handleInactivate = async (id: string) => { if (confirm("Tem certeza?")) { try { await setClienteStatus(id, 'inativo'); toast.success("Cliente inativado!"); } catch { toast.error("Erro ao inativar."); } } };
+
+    const handleStatusChange = async (id: string, newStatus: 'ativo' | 'inativo') => {
+        const action = newStatus === 'inativo' ? 'inativar' : 'reativar';
+        if (!confirm(`Tem certeza que deseja ${action} este cliente?`)) return;
+        try {
+            await setClienteStatus(id, newStatus);
+            toast.success(`Cliente ${action === 'inativar' ? 'inativado' : 'reativado'} com sucesso!`);
+        } catch {
+            toast.error(`Erro ao ${action} o cliente.`);
+        }
+    };
+
     const resetForm = () => { form.reset(defaultFormValues); setIsEditing(false); };
 
     const onSubmit = async (values: ClienteFormValues) => {
@@ -129,12 +151,22 @@ export default function ClientesPage() {
         { accessorKey: "nome", header: "Nome / Razão Social" }, { accessorKey: "documento", header: "Documento" }, { accessorKey: "telefone", header: "Telefone" },
         { id: "actions", cell: ({ row }) => {
             const item = row.original;
-            const isEditable = role === 'ADMINISTRADOR';
-            return (<div className="text-right flex justify-end items-center">
-                <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>
-                <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isEditable}><IconPencil className="h-4 w-4" /></Button>
-                {role === 'ADMINISTRADOR' && (<Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}><IconTrash className="h-4 w-4" /></Button>)}
-            </div>);
+            const isAdministrador = role === 'ADMINISTRADOR';
+            return (
+                <div className="text-right flex justify-end items-center">
+                    {item.status === 'ativo' && (
+                        <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isAdministrador}><IconPencil className="h-4 w-4" /></Button>
+                    {isAdministrador && (
+                        item.status === 'ativo' ? (
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusChange(item.id!, 'inativo')}><IconTrash className="h-4 w-4" /></Button>
+                        ) : (
+                            <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusChange(item.id!, 'ativo')}><IconRefresh className="h-4 w-4" /></Button>
+                        )
+                    )}
+                </div>
+            );
         }},
     ];
 
@@ -163,10 +195,20 @@ export default function ClientesPage() {
         );
     };
 
+    const tableControlsComponent = (
+        <div className="flex justify-end w-full">
+            <ToggleGroup type="single" value={statusFiltro} onValueChange={(value) => value && setStatusFiltro(value as StatusFiltro)}>
+                <ToggleGroupItem value="ativo">Ativos</ToggleGroupItem>
+                <ToggleGroupItem value="inativo">Inativos</ToggleGroupItem>
+            </ToggleGroup>
+        </div>
+    );
+
     return ( <> <ContasDoClienteModal />
         <CrudLayout
             formTitle={isEditing ? "Editar Cliente" : "Novo Cliente"}
             formContent={(
+                <fieldset disabled={role !== 'ADMINISTRADOR'} className="disabled:opacity-70 disabled:pointer-events-none">
                 <GenericForm schema={formSchema} onSubmit={onSubmit} formId="cliente-form" form={form}>
                      <div className="space-y-4">
                         <FormField name="nome" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Nome / Razão Social</FormLabel><FormControl><Input placeholder="Nome completo ou da empresa" {...field} /></FormControl><FormMessage /></FormItem> )} />
@@ -206,9 +248,19 @@ export default function ClientesPage() {
                         <Button type="submit" form="cliente-form">{isEditing ? "Salvar Alterações" : "Cadastrar Cliente"}</Button>
                     </div>
                 </GenericForm>
+                {role !== 'ADMINISTRADOR' && (
+                    <Alert variant="destructive" className="mt-6">
+                        <IconLock className="h-4 w-4" />
+                        <AlertTitle>Acesso Restrito</AlertTitle>
+                        <AlertDescription>
+                            Apenas administradores podem cadastrar ou editar clientes.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                </fieldset>
             )}
             tableTitle="Clientes Cadastrados"
-            tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." filterColumnId="nome" renderSubComponent={renderSubComponent} /> )}
+            tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." filterColumnId="nome" renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} /> )}
         />
     </> );
 }

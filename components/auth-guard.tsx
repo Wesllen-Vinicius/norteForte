@@ -1,26 +1,34 @@
+// components/auth-guard.tsx
 "use client";
 
 import { useEffect } from 'react';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
+import { LoadingIndicator } from './loading-indicator'; // Usaremos um indicador de carregamento
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  // Agora só pegamos o usuário. O isLoading é tratado pelo AuthProvider.
-  const { user } = useAuthStore();
+  const router = useRouter();
+  // **Correção:** Agora também observamos o isLoading
+  const { user, isLoading } = useAuthStore();
 
   useEffect(() => {
-    // Se não houver usuário, a única ação é redirecionar para o login.
-    if (!user) {
-      redirect('/login');
+    // Só toma uma decisão DEPOIS que o carregamento inicial terminar
+    if (!isLoading && !user) {
+      router.push('/login');
     }
-  }, [user]);
+  }, [user, isLoading, router]);
 
-  // Se houver um usuário, renderizamos a página solicitada.
+  // **Correção:** Exibe um loader enquanto a verificação está em andamento
+  if (isLoading) {
+    return <LoadingIndicator />;
+  }
+
+  // Se o carregamento terminou e o usuário existe, mostra a página
   if (user) {
     return <>{children}</>;
   }
 
-  // Se não houver usuário, o useEffect acima já cuidou do redirecionamento.
-  // Retornar null evita qualquer renderização desnecessária.
+  // Se o carregamento terminou e não há usuário, o useEffect já redirecionou.
+  // Retornar null evita a renderização da página antiga por um instante.
   return null;
 }

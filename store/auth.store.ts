@@ -1,46 +1,63 @@
+// store/auth.store.ts
 "use client";
 
 import { create } from 'zustand';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useDataStore } from './data.store';
 
 interface AuthState {
   user: User | null;
   role: 'ADMINISTRADOR' | 'USUARIO' | null;
-  isLoading: boolean; // Será 'true' até que o user e a role estejam definidos
+  isLoading: boolean;
   initializeAuthListener: () => () => void;
+  authUnsubscribe: (() => void) | null;
+  firestoreUnsubscribe: (() => void) | null;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   role: null,
-  isLoading: true, // Inicia como true por padrão
+  isLoading: true, // Começa como true por padrão
+  authUnsubscribe: null,
+  firestoreUnsubscribe: null,
 
   initializeAuthListener: () => {
-    // Retorna a função de unsubscribe do listener do Firebase
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (get().authUnsubscribe) return () => {};
+
+    const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      get().firestoreUnsubscribe?.(); // Limpa o listener anterior do firestore
+
       if (user) {
-        // Usuário logado, busca a role no Firestore
         const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
 
-        const role = userDoc.exists() ? userDoc.data().role : null;
+        const firestoreUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
+            // **Ponto chave:** Atualiza user, role e finaliza o loading JUNTOS
+            set({ user, role: userData.role, isLoading: false });
+          } else {
+            // Documento não existe, mas a verificação terminou
+            set({ user, role: null, isLoading: false });
+          }
+          // Inicializa os outros dados da aplicação após a role ser definida
+          useDataStore.getState().initializeSubscribers();
+        }, (error) => {
+            console.error("Erro ao observar o documento do usuário:", error);
+            set({ user, role: null, isLoading: false });
+        });
 
-        // Atualiza o estado com o usuário e sua role
-        set({ user, role, isLoading: false });
+        set({ firestoreUnsubscribe });
 
-        // Inicializa a busca de dados da aplicação
-        useDataStore.getState().initializeSubscribers();
       } else {
-        // Usuário deslogado ou não autenticado
-        // Limpa os dados de usuário e de dados da aplicação
-        set({ user: null, role: null, isLoading: false });
+        // Usuário deslogado, verificação concluída
+        set({ user: null, role: null, isLoading: false, firestoreUnsubscribe: null });
         useDataStore.getState().clearSubscribers();
       }
     });
 
-    return unsubscribe;
+    set({ authUnsubscribe });
+    return authUnsubscribe;
   },
 }));
