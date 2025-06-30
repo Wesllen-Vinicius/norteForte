@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import {
   Users, Building, Package, ShoppingCart, DollarSign, Banknote, Landmark, FileText,
-  Settings, LayoutDashboard, Boxes, Beef, LineChart, ChevronDown, User, Tags, Scale, ClipboardList, UserCog, HeartHandshake, Archive
+  Settings, LayoutDashboard, Boxes, Beef, LineChart, ChevronDown, User, Tags, Scale,
+  ClipboardList, UserCog, HeartHandshake, Archive, ShieldCheck
 } from 'lucide-react';
 import { IconInnerShadowTop } from '@tabler/icons-react';
 
@@ -75,6 +76,8 @@ const navItems = [
             { id: 'minha-conta', href: '/dashboard/account', icon: User, label: 'Minha Conta' },
             { id: 'empresa', href: '/dashboard/settings', icon: Settings, label: 'Empresa' },
             { id: 'usuarios', href: '/dashboard/usuarios', icon: UserCog, label: 'Usuários' },
+            // **NOVO ITEM DE MENU ADICIONADO AQUI**
+            { id: 'permissoes', href: '/dashboard/permissoes', icon: ShieldCheck, label: 'Funções e Permissões' },
         ]
     },
 ];

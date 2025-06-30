@@ -335,3 +335,39 @@ export const companyInfoSchema = z.object({
   email: z.string().email("Insira um e-mail válido."),
 });
 export type CompanyInfo = z.infer<typeof companyInfoSchema>;
+
+
+// Módulos do sistema para o sistema de permissões
+export const modulosDePermissao = {
+    clientes: "Clientes", fornecedores: "Fornecedores", produtos: "Produtos", funcionarios: "Funcionários",
+    cargos: "Cargos de Funcionários", usuarios: "Usuários do Sistema", permissoes: "Funções e Permissões",
+    compras: "Compras", abates: "Abates", producao: "Produção", vendas: "Vendas", estoque: "Ajuste de Estoque",
+    financeiro: "Financeiro (Geral)", relatorios: "Relatórios", metas: "Metas", settings: "Configurações da Empresa"
+};
+
+// Schema para um conjunto de permissões (ler, criar, etc.)
+const acoesPermissaoSchema = z.object({
+    ler: z.boolean().default(false),
+    criar: z.boolean().default(false),
+    editar: z.boolean().default(false),
+    inativar: z.boolean().default(false),
+});
+
+// Gera um objeto de schema onde cada módulo tem o schema de ações
+const permissoesSchema = z.object(
+  Object.keys(modulosDePermissao).reduce((acc, key) => {
+    acc[key] = acoesPermissaoSchema.optional(); // Torna cada módulo opcional
+    return acc;
+  }, {} as Record<string, z.ZodOptional<typeof acoesPermissaoSchema>>)
+);
+
+// Schema final para a Função (Role)
+export const roleSchema = z.object({
+  id: z.string().optional(),
+  nome: z.string().min(3, "O nome da função é obrigatório."),
+  descricao: z.string().optional(),
+  permissoes: permissoesSchema.default({}), // Garante que 'permissoes' seja sempre um objeto
+});
+
+export type Role = z.infer<typeof roleSchema>;
+

@@ -1,3 +1,4 @@
+// lib/services/fornecedores.services.ts
 import { db } from "@/lib/firebase";
 import { collection, addDoc, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where } from "firebase/firestore";
 import { Fornecedor } from "@/lib/schemas";
@@ -13,6 +14,20 @@ export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id' | 'created
   }
 };
 
+// **NOVA FUNÇÃO** para buscar fornecedores por status
+export const subscribeToFornecedoresByStatus = (status: 'ativo' | 'inativo', callback: (fornecedores: Fornecedor[]) => void) => {
+  const q = query(collection(db, "fornecedores"), where("status", "==", status));
+
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const fornecedores: Fornecedor[] = [];
+    querySnapshot.forEach((doc) => {
+      fornecedores.push({ id: doc.id, ...doc.data() as Omit<Fornecedor, 'id'> });
+    });
+    callback(fornecedores);
+  });
+};
+
+// Função antiga mantida para compatibilidade, se necessário, ou pode ser removida.
 export const subscribeToFornecedores = (callback: (fornecedores: Fornecedor[]) => void) => {
   const q = query(collection(db, "fornecedores"), where("status", "==", "ativo"));
 

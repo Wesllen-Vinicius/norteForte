@@ -1,3 +1,4 @@
+// lib/services/brasilapi.services.ts
 import axios from "axios";
 
 // Interface para tipar a resposta da API de CNPJ
@@ -32,16 +33,18 @@ interface CepData {
 export async function fetchCnpjData(cnpj: string): Promise<CnpjData> {
   try {
     const response = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-    if (response.status !== 200 || !response.data) {
-        throw new Error("Resposta inválida da API.");
+    if (response.status !== 200 || !response.data || !response.data.razao_social) {
+        throw new Error("Resposta inválida da API. Verifique o CNPJ digitado.");
     }
     return response.data;
   } catch (error: any) {
-    console.error("Erro ao buscar dados do CNPJ na BrasilAPI:", error.response?.data || error.message);
     if (error.response && error.response.status === 404) {
-        throw new Error("CNPJ não encontrado na base de dados da Receita Federal.");
+      // **TRATAMENTO ESPECÍFICO PARA ERRO 404**
+      throw new Error(`O CNPJ informado não foi encontrado na base da Receita Federal.`);
     }
-    throw new Error("Falha ao se comunicar com a API de consulta de CNPJ.");
+    // Tratamento para outros erros (ex: falha de rede)
+    console.error("Erro na BrasilAPI:", error.message);
+    throw new Error("Falha na comunicação com o serviço de consulta. Verifique sua conexão e tente novamente.");
   }
 }
 
