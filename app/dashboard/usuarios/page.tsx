@@ -24,7 +24,6 @@ import { SystemUser } from "@/lib/schemas";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-// Schema mais seguro, separando a validação de criação e edição
 const formSchema = z.object({
   displayName: z.string().min(3, "O nome de exibição é obrigatório."),
   email: z.string().email("E-mail inválido."),
