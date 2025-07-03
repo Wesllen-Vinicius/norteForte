@@ -1,7 +1,7 @@
 // lib/services/brasilapi.services.ts
 import axios from "axios";
 
-// Interface para tipar a resposta da API de CNPJ
+// Interfaces para tipar as respostas
 interface CnpjData {
   razao_social: string;
   nome_fantasia: string;
@@ -16,7 +16,6 @@ interface CnpjData {
   ddd_telefone_1: string;
 }
 
-// Interface para a resposta da API de CEP
 interface CepData {
     cep: string;
     state: string;
@@ -25,10 +24,13 @@ interface CepData {
     street: string;
 }
 
+interface MunicipioData {
+    nome: string;
+    codigo_ibge: string;
+}
+
 /**
  * Busca dados de um CNPJ na BrasilAPI.
- * @param cnpj - O CNPJ a ser consultado (apenas números).
- * @returns Os dados da empresa.
  */
 export async function fetchCnpjData(cnpj: string): Promise<CnpjData> {
   try {
@@ -39,10 +41,8 @@ export async function fetchCnpjData(cnpj: string): Promise<CnpjData> {
     return response.data;
   } catch (error: any) {
     if (error.response && error.response.status === 404) {
-      // **TRATAMENTO ESPECÍFICO PARA ERRO 404**
       throw new Error(`O CNPJ informado não foi encontrado na base da Receita Federal.`);
     }
-    // Tratamento para outros erros (ex: falha de rede)
     console.error("Erro na BrasilAPI:", error.message);
     throw new Error("Falha na comunicação com o serviço de consulta. Verifique sua conexão e tente novamente.");
   }
@@ -50,8 +50,6 @@ export async function fetchCnpjData(cnpj: string): Promise<CnpjData> {
 
 /**
  * Busca dados de endereço a partir de um CEP na BrasilAPI.
- * @param cep - O CEP a ser consultado (apenas números).
- * @returns Os dados do endereço.
  */
 export async function fetchCepData(cep: string): Promise<CepData> {
     try {
@@ -61,10 +59,25 @@ export async function fetchCepData(cep: string): Promise<CepData> {
         }
         return response.data;
     } catch (error: any) {
-        console.error("Erro ao buscar dados do CEP na BrasilAPI:", error.response?.data || error.message);
         if (error.response && error.response.status === 404) {
             throw new Error("CEP não encontrado.");
         }
         throw new Error("Falha ao se comunicar com a API de consulta de CEP.");
+    }
+}
+
+/**
+ * Busca o código IBGE de um município a partir da UF.
+ */
+export async function fetchMunicipioData(uf: string, cidade: string): Promise<MunicipioData | undefined> {
+    try {
+        const response = await axios.get<MunicipioData[]>(`https://brasilapi.com.br/api/ibge/municipios/v1/${uf}`);
+        // Normaliza os nomes para uma comparação mais confiável
+        const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const cidadeNormalizada = normalize(cidade);
+        return response.data.find(m => normalize(m.nome) === cidadeNormalizada);
+    } catch (error) {
+        console.error("Erro ao buscar dados do município:", error);
+        throw new Error("Não foi possível validar o município do destinatário.");
     }
 }

@@ -22,8 +22,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { Venda, ItemVendido, vendaSchema } from "@/lib/schemas";
+import { Venda, ItemVendido, vendaSchema, Produto } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
+import { emitirNFe } from "@/lib/services/nfe.services";
+import { getCompanyInfo } from "@/lib/services/settings.services";
 import z from "zod";
 
 const itemVendidoFormSchema = z.object({
@@ -281,15 +283,44 @@ export default function VendasPage() {
         }
     };
 
-    const handleEmitirNFe = (vendaId: string) => {
-        toast.promise(
-            new Promise(resolve => setTimeout(resolve, 1500)),
-            {
-                loading: `Emitindo NF-e para a venda ${vendaId.slice(0,5)}...`,
-                success: "NF-e emitida com sucesso! (Simulação)",
-                error: "Falha ao emitir NF-e. (Simulação)",
+    const handleEmitirNFe = async (venda: VendaComDetalhes) => {
+        const cliente = clientes.find(c => c.id === venda.clienteId);
+        if (!cliente) {
+            toast.error("Cliente da venda não encontrado.");
+            return;
+        }
+
+        const empresaInfo = await getCompanyInfo();
+        if (!empresaInfo) {
+            toast.error("Informações da empresa não configuradas.", {
+                description: "Vá para Configurações > Empresa para preencher os dados."
+            });
+            return;
+        }
+
+        const toastId = toast.loading("Enviando dados para a Sefaz...");
+        try {
+            const resultado = await emitirNFe(venda, empresaInfo, cliente, produtos);
+
+            // Objeto seguro para o Firestore, convertendo 'undefined' para 'null'
+            const nfeUpdateData = {
+                id: resultado.id || null,
+                status: resultado.status || 'erro_desconhecido',
+                url: resultado.url_danfe || null,
+            };
+
+            await updateVenda(venda.id!, { nfe: nfeUpdateData });
+
+            if (resultado.status === 'autorizado') {
+                toast.success("NF-e autorizada com sucesso!", { id: toastId });
+            } else if (resultado.status === 'processando') {
+                toast.info("NF-e está sendo processada pela Sefaz.", { id: toastId });
+            } else {
+                toast.error(`Falha na emissão: ${resultado.mensagem_sefaz || 'Erro desconhecido'}`, { id: toastId });
             }
-        );
+        } catch (error: any) {
+            toast.error("Erro ao emitir NF-e", { id: toastId, description: error.message });
+        }
     };
 
     const vendasEnriquecidas = useMemo(() => {
@@ -313,16 +344,24 @@ export default function VendasPage() {
         { header: "Status NF-e", accessorKey: "nfe.status", cell: ({ row }) => {
             const nfeStatus = row.original.nfe?.status;
             if(!nfeStatus) return <Badge variant="secondary">Não emitida</Badge>
-            return <Badge variant={nfeStatus === 'emitida' ? 'default' : 'destructive'}>{nfeStatus}</Badge>
+            const variant = nfeStatus === 'autorizado' ? 'default' : nfeStatus === 'processando' ? 'outline' : 'destructive';
+            return <Badge variant={variant}>{nfeStatus}</Badge>
         }},
         { header: "Valor Final", accessorKey: "valorFinal", cell: ({ row }) => `R$ ${(row.original.valorFinal || row.original.valorTotal).toFixed(2)}` },
         {
             id: "actions",
             cell: ({ row }) => {
                 const venda = row.original;
+                const podeEmitir = venda.status === 'Paga' && venda.nfe?.status !== 'autorizado';
                 return (
                     <div className="text-right space-x-1">
-                        <Button variant="outline" size="icon" onClick={() => handleEmitirNFe(venda.id!)}>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleEmitirNFe(venda)}
+                            disabled={!podeEmitir}
+                            title="Emitir NF-e"
+                        >
                             <IconFileInvoice className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (

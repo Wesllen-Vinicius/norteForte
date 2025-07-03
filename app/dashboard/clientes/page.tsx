@@ -13,7 +13,7 @@ import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
-import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MaskedInput } from "@/components/ui/masked-input";
@@ -39,14 +39,19 @@ const formSchema = clienteSchema.superRefine((data, ctx) => {
     if (data.tipoPessoa === 'juridica' && data.documento && !isValidCnpj(data.documento)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CNPJ inválido.", path: ["documento"], });
     }
+    if (data.indicadorInscricaoEstadual === '1' && !data.inscricaoEstadual) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inscrição Estadual é obrigatória para Contribuinte de ICMS.", path: ["inscricaoEstadual"] });
+    }
 });
 
 type ClienteFormValues = z.infer<typeof formSchema>;
 type StatusFiltro = "ativo" | "inativo";
 
 const defaultFormValues: DefaultValues<ClienteFormValues> = {
-    nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "", inscricaoEstadual: "",
-    endereco: { logradouro: "", numero: "", bairro: "", cidade: "", uf: "", cep: "", complemento: "" }
+    nome: "", tipoPessoa: undefined, documento: "", telefone: "", email: "",
+    indicadorInscricaoEstadual: "9",
+    inscricaoEstadual: "",
+    endereco: { logradouro: "", numero: "", bairro: "", cidade: "", uf: "", cep: "", complemento: "", pais: "Brasil", codigoPais: "1058" }
 };
 
 export default function ClientesPage() {
@@ -77,7 +82,7 @@ export default function ClientesPage() {
     const showCnpjSearch = useMemo(() => tipoPessoa === 'juridica' && isValidCnpj(documento), [tipoPessoa, documento]);
     const showCepSearch = useMemo(() => cep && cep.replace(/\D/g, '').length === 8, [cep]);
 
-    useEffect(() => { form.setValue("documento", ""); }, [tipoPessoa, form.setValue]);
+    useEffect(() => { form.setValue("documento", ""); }, [tipoPessoa]);
 
     const handleFetch = async (type: 'cnpj' | 'cep') => {
         setIsFetching(true);
@@ -137,7 +142,7 @@ export default function ClientesPage() {
         const details = [
             { label: "Tipo de Pessoa", value: cliente.tipoPessoa, isBadge: true },
             { label: "E-mail", value: cliente.email },
-            { label: "Inscrição Estadual", value: cliente.inscricaoEstadual },
+            { label: "Inscrição Estadual", value: cliente.inscricaoEstadual || 'N/A' },
             {
                 label: "Endereço Completo",
                 value: `${cliente.endereco.logradouro}, ${cliente.endereco.numero}, ${cliente.endereco.bairro} - ${cliente.endereco.cidade}/${cliente.endereco.uf}`,
@@ -223,7 +228,29 @@ export default function ClientesPage() {
                             <FormField name="telefone" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Telefone</FormLabel><FormControl><MaskedInput mask="(00) 00000-0000" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem> )} />
                             <FormField name="email" control={form.control} render={({ field }) => ( <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
                         </div>
-                        <FormField name="inscricaoEstadual" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Inscrição Estadual (Opcional)</FormLabel><FormControl><Input placeholder="Número da Inscrição Estadual" {...field} /></FormControl><FormMessage /></FormItem> )} />
+
+                        <Separator className="my-6" />
+                        <h3 className="text-lg font-medium">Dados Fiscais</h3>
+
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <FormField name="indicadorInscricaoEstadual" control={form.control} render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Indicador de Inscrição Estadual</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="1">Contribuinte ICMS (com IE)</SelectItem>
+                                            <SelectItem value="2">Contribuinte isento de IE</SelectItem>
+                                            <SelectItem value="9">Não Contribuinte</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormDescription>Essencial para a emissão de NF-e.</FormDescription>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                             <FormField name="inscricaoEstadual" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Inscrição Estadual</FormLabel><FormControl><Input placeholder="Obrigatório se for Contribuinte" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                        </div>
+
                         <Separator className="my-6" />
                         <h3 className="text-lg font-medium">Endereço</h3>
                         <div className="grid md:grid-cols-[1fr_auto] gap-2">

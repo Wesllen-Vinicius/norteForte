@@ -33,7 +33,16 @@ export const enderecoSchema = z.object({
     uf: z.string().length(2, "UF deve ter 2 caracteres."),
     cep: z.string().min(8, "O CEP é obrigatório."),
     complemento: z.string().optional(),
+    // Campos adicionados para conformidade fiscal
+    pais: z.string().default("Brasil"),
+    codigoPais: z.string().default("1058"),
 });
+
+export const IndicadorIEDestinatario = z.enum([
+    "1", // Contribuinte ICMS
+    "2", // Contribuinte isento de Inscrição
+    "9", // Não Contribuinte
+]);
 
 export const clienteSchema = z.object({
   id: z.string().optional(),
@@ -41,6 +50,7 @@ export const clienteSchema = z.object({
   tipoPessoa: z.enum(["fisica", "juridica"], { required_error: "Selecione o tipo de pessoa." }),
   documento: z.string().min(11, "O CPF/CNPJ é obrigatório."),
   inscricaoEstadual: z.string().optional().or(z.literal("")),
+  indicadorInscricaoEstadual: IndicadorIEDestinatario.default("9"),
   telefone: z.string().min(10, "O telefone é obrigatório."),
   email: z.string().email("O e-mail é obrigatório e deve ser válido."),
   endereco: enderecoSchema,
@@ -263,7 +273,11 @@ export const vendaSchema = z.object({
   status: z.enum(['Paga', 'Pendente']).default('Pendente'),
   registradoPor: z.object({ uid: z.string(), nome: z.string(), }),
   createdAt: z.any().optional(),
-  nfe: z.object({ id: z.string().optional(), status: z.string().optional(), url: z.string().optional(), }).optional(),
+  nfe: z.object({
+    id: z.string().optional(),
+    status: z.string().optional(),
+    url: z.string().optional(),
+  }).optional(),
 });
 export type Venda = z.infer<typeof vendaSchema>;
 
@@ -330,12 +344,20 @@ export const companyInfoSchema = z.object({
   nomeFantasia: z.string().min(3, "O nome fantasia é obrigatório."),
   cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
   inscricaoEstadual: z.string().min(1, "A Inscrição Estadual é obrigatória."),
-  endereco: enderecoSchema,
+  endereco: enderecoSchema, // Usa o mesmo schema base de endereço
   telefone: z.string().min(10, "O telefone é obrigatório."),
   email: z.string().email("Insira um e-mail válido."),
+  regimeTributario: z.enum(["1", "3"], { required_error: "Selecione um regime tributário." }).default("3"),
+  configuracaoFiscal: z.object({
+    cfop_padrao: z.string().length(4, "O CFOP deve ter 4 dígitos.").default("5101"),
+    cst_padrao: z.string().min(2, "O CST é obrigatório.").default("40"),
+    aliquota_icms_padrao: z.coerce.number().min(0).default(0),
+    reducao_bc_padrao: z.coerce.number().min(0).default(0),
+    informacoes_complementares: z.string().optional().default(""),
+  }).default({}),
 });
-export type CompanyInfo = z.infer<typeof companyInfoSchema>;
 
+export type CompanyInfo = z.infer<typeof companyInfoSchema>;
 
 // Módulos do sistema para o sistema de permissões
 export const modulosDePermissao = {
