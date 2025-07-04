@@ -26,7 +26,13 @@ const defaultFormValues: DefaultValues<CompanyInfoFormValues> = {
     nomeFantasia: "", razaoSocial: "", cnpj: "", inscricaoEstadual: "",
     endereco: { logradouro: "", numero: "", bairro: "", cidade: "", uf: "", cep: "", complemento: "", pais: "Brasil", codigoPais: "1058" },
     telefone: "", email: "", regimeTributario: "3",
-    configuracaoFiscal: { cfop_padrao: "5101", cst_padrao: "40", aliquota_icms_padrao: 0, reducao_bc_padrao: 0, informacoes_complementares: "Operação isenta do ICMS, conforme o Item 74 da Parte 2 do Anexo I do RICMS/RO – Abatedouro optante pela RBC prevista pelo Item 27 da Parte 2 do Anexo II do RICMS/RO." }
+    configuracaoFiscal: {
+        cfop_padrao: "5101",
+        cst_padrao: "040",
+        aliquota_icms_padrao: 0,
+        reducao_bc_padrao: 0,
+        informacoes_complementares: "Operação isenta do ICMS, conforme o Item 74 da Parte 2 do Anexo I do RICMS/RO – Abatedouro optante pela RBC prevista pelo Item 27 da Parte 2 do Anexo II do RICMS/RO."
+    }
 };
 
 export default function SettingsPage() {
@@ -91,7 +97,7 @@ export default function SettingsPage() {
         try {
             await saveCompanyInfo(values);
             toast.success("Informações da empresa salvas com sucesso!");
-            setIsLocked(true); // Bloqueia o formulário após salvar
+            setIsLocked(true);
         } catch {
             toast.error("Erro ao salvar as informações.");
         }

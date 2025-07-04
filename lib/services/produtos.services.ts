@@ -1,13 +1,39 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import {
   Produto,
   produtoSchema,
 } from "@/lib/schemas";
 
+export const getProximoCodigoProduto = async (): Promise<string> => {
+    const q = query(collection(db, "produtos"));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        return "1";
+    }
+
+    let maxCodigo = 0;
+    querySnapshot.forEach((doc) => {
+        const codigo = parseInt(doc.data().codigo, 10);
+        if (!isNaN(codigo) && codigo > maxCodigo) {
+            maxCodigo = codigo;
+        }
+    });
+
+    return (maxCodigo + 1).toString();
+};
+
+
 export const addProduto = async (produto: Omit<Produto, 'id' | 'unidadeNome' | 'categoriaNome' | 'createdAt' | 'status'>) => {
   try {
-    const dataWithTimestamp = { ...produto, status: 'ativo', createdAt: serverTimestamp() };
+    const proximoCodigo = await getProximoCodigoProduto();
+    const dataWithTimestamp = {
+        ...produto,
+        codigo: proximoCodigo,
+        status: 'ativo',
+        createdAt: serverTimestamp()
+    };
     const docRef = await addDoc(collection(db, "produtos"), dataWithTimestamp);
     return docRef.id;
   } catch (e) {

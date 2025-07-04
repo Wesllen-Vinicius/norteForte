@@ -25,7 +25,6 @@ import {
 import { NavUser } from './nav-user';
 import { SidebarPinToggle } from './sidebar-pin-toggle';
 
-// Lista completa de todos os itens de navegação
 const navItems = [
     { id: 'dashboard', href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     {
@@ -51,6 +50,7 @@ const navItems = [
             { id: 'abates', href: '/dashboard/abates', icon: Beef, label: 'Abates' },
             { id: 'producao', href: '/dashboard/producao', icon: Beef, label: 'Produção' },
             { id: 'vendas', href: '/dashboard/vendas', icon: DollarSign, label: 'Vendas' },
+            { id: 'notas-fiscais', href: '/dashboard/notas-fiscais', icon: FileText, label: 'Notas Fiscais' },
             { id: 'estoque', href: '/dashboard/estoque', icon: Archive, label: 'Estoque' },
         ],
     },
@@ -76,7 +76,6 @@ const navItems = [
             { id: 'minha-conta', href: '/dashboard/account', icon: User, label: 'Minha Conta' },
             { id: 'empresa', href: '/dashboard/settings', icon: Settings, label: 'Empresa' },
             { id: 'usuarios', href: '/dashboard/usuarios', icon: UserCog, label: 'Usuários' },
-            // **NOVO ITEM DE MENU ADICIONADO AQUI**
             { id: 'permissoes', href: '/dashboard/permissoes', icon: ShieldCheck, label: 'Funções e Permissões' },
         ]
     },

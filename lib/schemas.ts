@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { Timestamp } from "firebase/firestore";
-
 // =================================================================
 // Schemas Base e de Autenticação
 // =================================================================
@@ -121,6 +119,7 @@ export type Categoria = z.infer<typeof categoriaSchema>;
 
 const baseProdutoSchema = z.object({
   id: z.string().optional(),
+  codigo: z.string().optional(),
   quantidade: z.number().default(0).optional(),
   createdAt: z.any().optional(),
   status: z.enum(['ativo', 'inativo']).default('ativo').optional(),
@@ -276,7 +275,8 @@ export const vendaSchema = z.object({
   nfe: z.object({
     id: z.string().optional(),
     status: z.string().optional(),
-    url: z.string().optional(),
+    url_danfe: z.string().optional(),
+    url_xml: z.string().optional(),
   }).optional(),
 });
 export type Venda = z.infer<typeof vendaSchema>;
@@ -344,13 +344,13 @@ export const companyInfoSchema = z.object({
   nomeFantasia: z.string().min(3, "O nome fantasia é obrigatório."),
   cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
   inscricaoEstadual: z.string().min(1, "A Inscrição Estadual é obrigatória."),
-  endereco: enderecoSchema, // Usa o mesmo schema base de endereço
+  endereco: enderecoSchema,
   telefone: z.string().min(10, "O telefone é obrigatório."),
   email: z.string().email("Insira um e-mail válido."),
   regimeTributario: z.enum(["1", "3"], { required_error: "Selecione um regime tributário." }).default("3"),
   configuracaoFiscal: z.object({
     cfop_padrao: z.string().length(4, "O CFOP deve ter 4 dígitos.").default("5101"),
-    cst_padrao: z.string().min(2, "O CST é obrigatório.").default("40"),
+    cst_padrao: z.string().min(2, "O CST é obrigatório.").default("040"),
     aliquota_icms_padrao: z.coerce.number().min(0).default(0),
     reducao_bc_padrao: z.coerce.number().min(0).default(0),
     informacoes_complementares: z.string().optional().default(""),
@@ -359,7 +359,6 @@ export const companyInfoSchema = z.object({
 
 export type CompanyInfo = z.infer<typeof companyInfoSchema>;
 
-// Módulos do sistema para o sistema de permissões
 export const modulosDePermissao = {
     clientes: "Clientes", fornecedores: "Fornecedores", produtos: "Produtos", funcionarios: "Funcionários",
     cargos: "Cargos de Funcionários", usuarios: "Usuários do Sistema", permissoes: "Funções e Permissões",
@@ -367,7 +366,6 @@ export const modulosDePermissao = {
     financeiro: "Financeiro (Geral)", relatorios: "Relatórios", metas: "Metas", settings: "Configurações da Empresa"
 };
 
-// Schema para um conjunto de permissões (ler, criar, etc.)
 const acoesPermissaoSchema = z.object({
     ler: z.boolean().default(false),
     criar: z.boolean().default(false),
@@ -375,21 +373,20 @@ const acoesPermissaoSchema = z.object({
     inativar: z.boolean().default(false),
 });
 
-// Gera um objeto de schema onde cada módulo tem o schema de ações
 const permissoesSchema = z.object(
   Object.keys(modulosDePermissao).reduce((acc, key) => {
-    acc[key] = acoesPermissaoSchema.optional(); // Torna cada módulo opcional
+    acc[key] = acoesPermissaoSchema.optional();
     return acc;
   }, {} as Record<string, z.ZodOptional<typeof acoesPermissaoSchema>>)
 );
 
-// Schema final para a Função (Role)
 export const roleSchema = z.object({
   id: z.string().optional(),
   nome: z.string().min(3, "O nome da função é obrigatório."),
   descricao: z.string().optional(),
-  permissoes: permissoesSchema.default({}), // Garante que 'permissoes' seja sempre um objeto
+  permissoes: permissoesSchema.default({}),
 });
 
 export type Role = z.infer<typeof roleSchema>;
+
 
