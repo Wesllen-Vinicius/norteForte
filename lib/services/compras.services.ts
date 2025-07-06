@@ -1,61 +1,86 @@
-// Em lib/services/compras.services.ts
-
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, Timestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, doc, runTransaction, serverTimestamp, Timestamp, onSnapshot, query, QuerySnapshot, DocumentData } from "firebase/firestore";
+import { Compra } from "@/lib/schemas";
+import { addMonths } from 'date-fns';
 
-const itemCompradoSchema = z.object({
-  produtoId: z.string().min(1, "Selecione um produto."),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().positive("A quantidade deve ser positiva."),
-  custoUnitario: z.coerce.number().min(0, "O custo não pode ser negativo."),
-});
+type CompraPayload = Omit<Compra, 'id' | 'createdAt' | 'status'>;
 
-export const compraSchema = z.object({
-  id: z.string().optional(),
-  fornecedorId: z.string().min(1, "Selecione um fornecedor."),
-  notaFiscal: z.string().min(1, "O número da nota fiscal é obrigatório."),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  itens: z.array(itemCompradoSchema).min(1, "Adicione pelo menos um item."),
-  condicaoPagamento: z.string().min(1, "A condição de pagamento é obrigatória."),
-  valorTotal: z.coerce.number(),
-  createdAt: z.any().optional(),
-  // CORREÇÃO: Adicione a linha abaixo
-  contaBancariaId: z.string().optional(),
-});
-
-export type Compra = z.infer<typeof compraSchema>;
-
-export const registrarCompra = async (compraData: Omit<Compra, 'id' | 'createdAt'>) => {
+export const registrarCompra = async (compraData: CompraPayload) => {
   try {
     await runTransaction(db, async (transaction) => {
-      const compraDocRef = doc(collection(db, "compras"));
-      transaction.set(compraDocRef, { ...compraData, createdAt: serverTimestamp(), data: Timestamp.fromDate(compraData.data) });
+      if (!compraData.contaBancariaId) {
+        throw new Error("A conta bancária de origem é obrigatória para registrar a compra.");
+      }
+      const contaRef = doc(db, "contasBancarias", compraData.contaBancariaId);
+      const contaDoc = await transaction.get(contaRef);
+      if (!contaDoc.exists()) throw new Error("Conta bancária de origem não encontrada.");
 
-      const contaPagarDocRef = doc(collection(db, "contasAPagar"));
-      transaction.set(contaPagarDocRef, {
-        compraId: compraDocRef.id,
-        fornecedorId: compraData.fornecedorId,
-        notaFiscal: compraData.notaFiscal,
-        valor: compraData.valorTotal,
-        dataEmissao: Timestamp.fromDate(compraData.data),
-        condicaoPagamento: compraData.condicaoPagamento,
-        status: "Pendente",
+      if (compraData.condicaoPagamento === 'A_VISTA') {
+        const saldoAtual = contaDoc.data().saldoAtual || 0;
+        const novoSaldo = saldoAtual - compraData.valorTotal;
+        transaction.update(contaRef, { saldoAtual: novoSaldo });
+      }
+
+      const compraDocRef = doc(collection(db, "compras"));
+      transaction.set(compraDocRef, {
+        ...compraData,
+        status: 'ativo',
+        createdAt: serverTimestamp(),
+        data: Timestamp.fromDate(compraData.data),
+        dataPrimeiroVencimento: compraData.dataPrimeiroVencimento ? Timestamp.fromDate(compraData.dataPrimeiroVencimento) : null,
       });
+
+      if (compraData.condicaoPagamento === 'A_VISTA') {
+        const contaPagarDocRef = doc(collection(db, "contasAPagar"));
+        transaction.set(contaPagarDocRef, {
+            compraId: compraDocRef.id,
+            fornecedorId: compraData.fornecedorId,
+            notaFiscal: compraData.notaFiscal,
+            valor: compraData.valorTotal,
+            dataEmissao: Timestamp.fromDate(compraData.data),
+            dataVencimento: Timestamp.fromDate(compraData.data),
+            status: "Paga",
+            parcela: "1/1",
+        });
+      } else {
+        const { numeroParcelas, dataPrimeiroVencimento, valorTotal } = compraData;
+        const valorParcela = valorTotal / numeroParcelas!;
+        for (let i = 0; i < numeroParcelas!; i++) {
+            const contaPagarDocRef = doc(collection(db, "contasAPagar"));
+            const dataVencimento = addMonths(dataPrimeiroVencimento!, i);
+            transaction.set(contaPagarDocRef, {
+                compraId: compraDocRef.id,
+                fornecedorId: compraData.fornecedorId,
+                notaFiscal: compraData.notaFiscal,
+                valor: valorParcela,
+                dataEmissao: Timestamp.fromDate(compraData.data),
+                dataVencimento: Timestamp.fromDate(dataVencimento),
+                status: "Pendente",
+                parcela: `${i + 1}/${numeroParcelas}`,
+            });
+        }
+      }
 
       for (const item of compraData.itens) {
         const produtoDocRef = doc(db, "produtos", item.produtoId);
         const produtoDoc = await transaction.get(produtoDocRef);
-
         if (!produtoDoc.exists()) throw new Error(`Produto "${item.produtoNome}" não encontrado.`);
 
         const produtoData = produtoDoc.data();
         const estoqueAtual = produtoData.quantidade || 0;
-        const novoEstoque = estoqueAtual + item.quantidade;
+        const custoAntigo = produtoData.custoUnitario || 0;
+
+        const valorEstoqueAntigo = estoqueAtual * custoAntigo;
+        const valorNovaCompra = item.quantidade * item.custoUnitario;
+        const novoEstoqueTotal = estoqueAtual + item.quantidade;
+
+        const novoCustoMedio = novoEstoqueTotal > 0
+          ? (valorEstoqueAntigo + valorNovaCompra) / novoEstoqueTotal
+          : item.custoUnitario;
 
         transaction.update(produtoDocRef, {
-            quantidade: novoEstoque,
-            custoUnitario: item.custoUnitario
+          quantidade: novoEstoqueTotal,
+          custoUnitario: parseFloat(novoCustoMedio.toFixed(2))
         });
 
         const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
@@ -73,4 +98,20 @@ export const registrarCompra = async (compraData: Omit<Compra, 'id' | 'createdAt
     console.error("Erro ao registrar compra: ", error);
     throw error;
   }
+};
+
+export const subscribeToCompras = (callback: (compras: Compra[]) => void) => {
+    const q = query(collection(db, "compras"));
+    return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+      let compras: Compra[] = [];
+      querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          compras.push({
+              ...data,
+              id: doc.id,
+              data: (data.data as Timestamp).toDate(),
+          } as Compra);
+      });
+      callback(compras.sort((a, b) => (b.data as Date).getTime() - (a.data as Date).getTime()));
+    });
 };

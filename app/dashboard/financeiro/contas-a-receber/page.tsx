@@ -1,49 +1,69 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react";
-import { onSnapshot, collection } from "firebase/firestore";
-import { ColumnDef } from "@tanstack/react-table";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { onSnapshot, collection, doc, updateDoc, Timestamp } from "firebase/firestore";
+import { ColumnDef, Row } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Timestamp } from "firebase/firestore";
-
 import { db } from "@/lib/firebase";
 import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-// CORREÇÃO: Importando 'ContaAReceber' do local correto
-import { ContaAReceber, updateStatusContaAReceber } from "@/lib/services/contasAReceber.services";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { useDataStore } from "@/store/data.store";
-import { updateVendaStatus } from "@/lib/services/vendas.services";
+import { useAuthStore } from "@/store/auth.store";
+import { subscribeToContasAReceber, receberPagamento } from "@/lib/services/contasAReceber.services";
+import { ContaAReceber } from "@/lib/schemas";
+import { DetailsSubRow } from "@/components/details-sub-row";
+import Link from "next/link";
 
 type ContaComNome = ContaAReceber & { clienteNome?: string };
 
 export default function ContasAReceberPage() {
     const [contas, setContas] = useState<ContaAReceber[]>([]);
-    const clientes = useDataStore((state) => state.clientes);
+    const { clientes, contasBancarias } = useDataStore();
+    const { user, role } = useAuthStore();
+
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [selectedConta, setSelectedConta] = useState<ContaAReceber | null>(null);
+    const [selectedContaBancaria, setSelectedContaBancaria] = useState<string>("");
 
     useEffect(() => {
-        const unsubContas = onSnapshot(collection(db, "contasAReceber"), (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ContaAReceber));
-            setContas(data);
+        const unsubContas = subscribeToContasAReceber((data) => {
+            const contasComDataConvertida = data.map(c => ({
+                ...c,
+                dataEmissao: c.dataEmissao instanceof Timestamp ? c.dataEmissao.toDate() : c.dataEmissao,
+                dataVencimento: c.dataVencimento instanceof Timestamp ? c.dataVencimento.toDate() : c.dataVencimento
+            }));
+            setContas(contasComDataConvertida);
         });
 
-        return () => {
-            unsubContas();
-        };
+        return () => unsubContas();
     }, []);
 
-    const handleMarcarComoRecebida = async (conta: ContaAReceber) => {
+    const handleOpenDialog = (conta: ContaAReceber) => {
+        setSelectedConta(conta);
+        setIsDialogOpen(true);
+    };
+
+    const handleConfirmRecebimento = async () => {
+        if (!selectedConta || !selectedContaBancaria || !user) {
+            toast.error("Selecione uma conta bancária para continuar.");
+            return;
+        }
+
         try {
-            await updateStatusContaAReceber(conta.id, "Recebida");
-            if (conta.vendaId) {
-                await updateVendaStatus(conta.vendaId, "Paga");
-            }
-            toast.success("Conta marcada como recebida!");
-        } catch {
-            toast.error("Erro ao atualizar o status da conta.");
+            await receberPagamento(selectedConta, selectedContaBancaria, user);
+            toast.success("Conta recebida e baixada com sucesso!");
+        } catch (error: any) {
+            toast.error("Falha ao processar recebimento.", { description: error.message });
+        } finally {
+            setIsDialogOpen(false);
+            setSelectedConta(null);
+            setSelectedContaBancaria("");
         }
     };
 
@@ -54,10 +74,19 @@ export default function ContasAReceberPage() {
         }));
     }, [contas, clientes]);
 
+    const renderSubComponent = useCallback(({ row }: { row: Row<ContaComNome> }) => {
+        const conta = row.original;
+        const details = [
+            { label: "Data de Emissão", value: format(new Date(conta.dataEmissao), 'dd/MM/yyyy') },
+            { label: "Venda de Origem", value: <Button asChild variant="link" size="sm" className="p-0 h-auto"><Link href={`/dashboard/vendas?vendaId=${conta.vendaId}`}>Ver Venda</Link></Button> },
+            { label: "ID da Conta", value: conta.id, className: "col-span-1 sm:col-span-2" },
+        ];
+        return <DetailsSubRow details={details} />;
+    }, []);
+
     const columns: ColumnDef<ContaComNome>[] = [
         { header: "Cliente", accessorKey: "clienteNome" },
-        { header: "Emissão", accessorKey: "dataEmissao", cell: ({ row }) => format((row.original.dataEmissao as Timestamp).toDate(), 'dd/MM/yyyy') },
-        { header: "Vencimento", accessorKey: "dataVencimento", cell: ({ row }) => row.original.dataVencimento ? format((row.original.dataVencimento as Timestamp).toDate(), 'dd/MM/yyyy') : 'N/A' },
+        { header: "Vencimento", accessorKey: "dataVencimento", cell: ({ row }) => row.original.dataVencimento ? format(row.original.dataVencimento, 'dd/MM/yyyy') : 'N/A' },
         { header: "Valor", accessorKey: "valor", cell: ({ row }) => `R$ ${row.original.valor.toFixed(2)}`},
         { header: "Status", accessorKey: "status", cell: ({ row }) => (
             <Badge variant={row.original.status === 'Pendente' ? 'destructive' : 'default'}>
@@ -66,8 +95,8 @@ export default function ContasAReceberPage() {
         )},
         { id: "actions", cell: ({ row }) => (
             <div className="text-right">
-                {row.original.status === 'Pendente' && (
-                    <Button size="sm" onClick={() => handleMarcarComoRecebida(row.original)}>Marcar como Recebida</Button>
+                {row.original.status === 'Pendente' && role === "ADMINISTRADOR" && (
+                    <Button size="sm" onClick={() => handleOpenDialog(row.original)}>Dar Baixa (Receber)</Button>
                 )}
             </div>
         )}
@@ -75,18 +104,46 @@ export default function ContasAReceberPage() {
 
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmar Recebimento</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                         <p>Confirme a baixa para a conta no valor de <span className="font-semibold text-lg">R$ {selectedConta?.valor.toFixed(2)}</span>.</p>
+                         <div className="space-y-2">
+                            <Label htmlFor="conta-bancaria">Selecione a conta de destino do recebimento</Label>
+                             <Select onValueChange={setSelectedContaBancaria} value={selectedContaBancaria}>
+                                <SelectTrigger id="conta-bancaria">
+                                    <SelectValue placeholder="Selecione a conta..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {contasBancarias.map(conta => (
+                                        <SelectItem key={conta.id} value={conta.id!}>{`${conta.nomeConta} (Saldo: R$ ${conta.saldoAtual?.toFixed(2)})`}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
+                         </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+                        <Button type="button" onClick={handleConfirmRecebimento} disabled={!selectedContaBancaria}>Confirmar Recebimento</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Card>
                 <CardHeader>
                     <CardTitle>Contas a Receber</CardTitle>
                     <CardDescription>Visualize e gerencie as contas de vendas a prazo.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* CORREÇÃO: Removidas as props de filtro antigas e adicionadas as novas */}
                     <GenericTable
                         columns={columns}
                         data={contasComCliente}
                         filterPlaceholder="Pesquisar por cliente..."
                         filterColumnId="clienteNome"
+                        renderSubComponent={renderSubComponent}
                     />
                 </CardContent>
             </Card>

@@ -1,130 +1,105 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState,  ReactElement } from "react";
 import Link from "next/link";
-import { useForm, useFieldArray, useWatch, Control } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Control, SubmitHandler, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { format } from 'date-fns';
-import { IconPlus, IconTrash, IconChevronDown, IconChevronUp, IconAlertTriangle, IconLock, IconPencil, IconFileInvoice } from "@tabler/icons-react";
+import { format } from "date-fns";
+import { IconPlus, IconTrash,  IconPencil, IconFileInvoice, IconAlertTriangle, IconLoader, IconFileDownload, IconFileX, IconX } from "@tabler/icons-react";
 import { ColumnDef, Row } from "@tanstack/react-table";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { DatePicker } from "@/components/date-picker";
+
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
+import { NfePreviewModal } from "@/components/nfe-preview-modal";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { Venda, ItemVendido } from "@/lib/schemas";
+import { Venda, ItemVendido, vendaSchema, Produto, Unidade, CompanyInfo, Cliente } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
-import { z } from "zod";
+import { emitirNFe } from "@/lib/services/nfe.services";
+import { getCompanyInfo } from "@/lib/services/settings.services";
+import z from "zod";
+import { DatePicker } from "@/components/date-picker";
 
-// CORREÇÃO: Schema específico para o formulário, resolvendo o conflito de tipo.
 const itemVendidoFormSchema = z.object({
     produtoId: z.string(),
     produtoNome: z.string(),
-    quantidade: z.coerce.number().min(0, "A quantidade não pode ser negativa."),
+    quantidade: z.coerce.number().min(0.0001, "A quantidade deve ser maior que zero."),
     precoUnitario: z.coerce.number().min(0, "O preço não pode ser negativo."),
     custoUnitario: z.coerce.number().min(0),
-    // Corrigido: 'estoqueDisponivel' agora é um número, sem ser opcional
     estoqueDisponivel: z.number(),
 }).refine(
     (data) => data.quantidade > 0 ? data.quantidade <= data.estoqueDisponivel : true,
-    (data) => ({ message: `Estoque insuficiente. Disponível: ${data.estoqueDisponivel}`, path: ["quantidade"] })
+    (data) => ({ message: `Estoque: ${data.estoqueDisponivel}`, path: ["quantidade"] })
 );
 
-const formVendaSchema = z.object({
-  clienteId: z.string().min(1, "Selecione um cliente."),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto à venda."),
-  valorTotal: z.coerce.number().min(0, "O valor total não pode ser negativo."),
-  condicaoPagamento: z.enum(["A_VISTA", "A_PRAZO"], { required_error: "Selecione a condição." }),
-  metodoPagamento: z.string({ required_error: "O método de pagamento é obrigatório." }).min(1, "O método de pagamento é obrigatório."),
-  contaBancariaId: z.string().optional(),
-  numeroParcelas: z.coerce.number().optional(),
-  taxaCartao: z.coerce.number().optional(),
-  dataVencimento: z.date().optional(),
-}).refine(data => {
-    if (data.condicaoPagamento === "A_PRAZO") return !!data.dataVencimento;
-    return true;
-}, {
-    message: "A data de vencimento é obrigatória para vendas a prazo.",
-    path: ["dataVencimento"],
+const formVendaSchema = vendaSchema.pick({
+    clienteId: true, data: true, produtos: true, valorTotal: true, condicaoPagamento: true, metodoPagamento: true,
+    contaBancariaId: true, numeroParcelas: true, taxaCartao: true, dataVencimento: true
+}).extend({
+    produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto."),
 });
+
 
 type VendaFormValues = z.infer<typeof formVendaSchema>;
 type VendaComDetalhes = Venda & { clienteNome?: string };
 
 const defaultFormValues: VendaFormValues = {
-    clienteId: "",
-    data: new Date(),
-    produtos: [],
-    condicaoPagamento: "A_VISTA",
-    metodoPagamento: "",
-    contaBancariaId: "",
-    valorTotal: 0,
-    dataVencimento: undefined,
-    numeroParcelas: 1,
-    taxaCartao: 0,
+    clienteId: "", data: new Date(), produtos: [], condicaoPagamento: "A_VISTA", metodoPagamento: "",
+    contaBancariaId: "", valorTotal: 0, dataVencimento: new Date(), numeroParcelas: 1, taxaCartao: 0,
 };
 
-const renderSubComponent = ({ row }: { row: Row<VendaComDetalhes> }) => (
-    <div className="p-4 bg-muted/20 animate-in fade-in-50 zoom-in-95">
-        <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-            {row.original.produtos.map((p, i) => (
-                <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
-                    <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
-                    <p><strong>Quantidade:</strong> {p.quantidade}</p>
-                    <p><strong>Preço Un.:</strong> R$ {p.precoUnitario.toFixed(2)}</p>
-                </div>
-            ))}
+const getStatusInfo = (status: string | undefined): { text: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" } => {
+    switch (status) {
+        case 'autorizado': return { text: 'Autorizada', variant: 'success' };
+        case 'processando_autorizacao': return { text: 'Processando', variant: 'warning' };
+        case 'cancelado': return { text: 'Cancelada', variant: 'outline' };
+        case 'erro_autorizacao': return { text: 'Erro', variant: 'destructive' };
+        case 'erro_cancelamento': return { text: 'Erro ao Cancelar', variant: 'destructive' };
+        default: return { text: 'Não Emitida', variant: 'secondary' };
+    }
+};
+
+const renderSubComponent = ({ row }: { row: Row<VendaComDetalhes> }):ReactElement => {
+    return (
+        <div className="p-4 bg-muted/20">
+            <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {row.original.produtos.map((p, i) => (
+                    <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
+                        <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
+                        <p><strong>Quantidade:</strong> {p.quantidade}</p>
+                        <p><strong>Preço Un.:</strong> R$ {p.precoUnitario.toFixed(2)}</p>
+                    </div>
+                ))}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const ItemProdutoVenda = ({ index, control, remove, handleProdutoChange, produtosParaVendaOptions }: {
-    index: number,
-    control: Control<VendaFormValues>,
-    remove: (i: number) => void,
-    handleProdutoChange: (i: number, id: string) => void,
-    produtosParaVendaOptions: { label: string, value: string }[]
+    index: number, control: Control<VendaFormValues>, remove: (i: number) => void,
+    handleProdutoChange: (i: number, id: string) => void, produtosParaVendaOptions: { label: string, value: string }[]
 }) => {
+    const { fieldState } = useController({ name: `produtos.${index}.quantidade`, control });
+    const hasError = !!fieldState.error;
+
     return(
-        <div className="p-3 border rounded-md bg-muted/50 space-y-2">
+        <div className={`p-3 border rounded-md bg-muted/50 space-y-2 transition-all ${hasError ? 'border-destructive' : ''}`}>
             <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-start">
-                <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field }) => (
-                    <FormItem>
-                        <Select onValueChange={(value) => handleProdutoChange(index, value)} value={field.value}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                                {produtosParaVendaOptions.map(p => (
-                                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                )} />
-                <FormField name={`produtos.${index}.quantidade`} control={control} render={({ field }) => (
-                    <FormItem>
-                        <FormControl>
-                            <Input
-                                type="number"
-                                placeholder="Qtd"
-                                {...field}
-                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                            />
-                        </FormControl>
-                    </FormItem>
-                )} />
+                <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field }) => ( <FormItem><Select onValueChange={(value) => {field.onChange(value); handleProdutoChange(index, value)}} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger></FormControl><SelectContent>{produtosParaVendaOptions.map(p => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem> )}/>
+                <FormField name={`produtos.${index}.quantidade`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Qtd" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className={hasError ? 'border-destructive focus-visible:ring-destructive' : ''}/></FormControl></FormItem> )}/>
                 <FormField name={`produtos.${index}.precoUnitario`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Preço" {...field} readOnly className="bg-muted-foreground/20" /></FormControl><FormMessage /></FormItem> )} />
                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><IconTrash className="h-4 w-4 text-destructive" /></Button>
             </div>
@@ -134,113 +109,83 @@ const ItemProdutoVenda = ({ index, control, remove, handleProdutoChange, produto
 }
 
 const metodosPagamentoOptions = {
-    vista: [
-        { value: "Dinheiro", label: "Dinheiro" },
-        { value: "PIX", label: "PIX" },
-        { value: "Cartão de Débito", label: "Cartão de Débito" },
-        { value: "Cartão de Crédito", label: "Cartão de Crédito" }
-    ],
-    prazo: [
-        { value: "Boleto/Prazo", label: "Boleto/Prazo" },
-        { value: "PIX", label: "PIX" },
-        { value: "Dinheiro", label: "Dinheiro" }
-    ]
+    vista: [ { value: "Dinheiro", label: "Dinheiro" }, { value: "PIX", label: "PIX" }, { value: "Cartão de Débito", label: "Cartão de Débito" }, { value: "Cartão de Crédito", label: "Cartão de Crédito" } ],
+    prazo: [ { value: "Boleto/Prazo", label: "Boleto/Prazo" }, { value: "PIX", label: "PIX" }, { value: "Dinheiro", label: "Dinheiro" } ]
 };
+
+const NfeActionButton = ({ venda, onPrepareNFe }: { venda: VendaComDetalhes, onPrepareNFe: (venda: VendaComDetalhes) => void }) => {
+    const status = venda.nfe?.status;
+    const isPaid = venda.status === 'Paga';
+
+    if (!isPaid) {
+        return <Badge variant="outline">Aguardando Pagamento</Badge>;
+    }
+
+    switch (status) {
+        case 'autorizado':
+            return (
+                <div className="flex gap-2">
+                     <Button size="sm" variant="outline" asChild><a href={venda.nfe?.url_danfe} target="_blank" rel="noopener noreferrer"><IconFileDownload className="h-4 w-4"/></a></Button>
+                     <Button size="sm" variant="outline" asChild><a href={venda.nfe?.url_xml} target="_blank" rel="noopener noreferrer"><IconFileX className="h-4 w-4"/></a></Button>
+                </div>
+            );
+        case 'processando_autorizacao':
+            return <Button size="sm" variant="secondary" disabled><IconLoader className="h-4 w-4 animate-spin mr-2"/>Processando...</Button>;
+        case 'erro_autorizacao':
+            return (
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button size="sm" variant="destructive" onClick={() => onPrepareNFe(venda)}><IconAlertTriangle className="h-4 w-4 mr-2"/>Erro</Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Houve um erro. Clique para corrigir e tentar novamente.</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            );
+        case 'cancelado':
+            return <Badge variant="secondary">Cancelada</Badge>;
+        default:
+            return <Button size="sm" onClick={() => onPrepareNFe(venda)}><IconFileInvoice className="h-4 w-4 mr-2"/>Emitir NF-e</Button>;
+    }
+}
+
 
 export default function VendasPage() {
     const { produtos, clientes, vendas, unidades, contasBancarias } = useDataStore();
     const { user, role } = useAuthStore();
+    const [isFormVisible, setIsFormVisible] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [valorFinalCalculado, setValorFinalCalculado] = useState(0);
+    const [isNfeModalOpen, setIsNfeModalOpen] = useState(false);
+    const [nfePreviewData, setNfePreviewData] = useState<any | null>(null);
+    const [isEmittingNfe, setIsEmittingNfe] = useState(false);
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
-    const produtosParaVenda = useMemo(() => produtos.filter(p => p.tipoProduto === 'VENDA'), [produtos]);
-    const clientesOptions = useMemo(() => clientes.map(c => ({ label: c.nome, value: c.id! })), [clientes]);
-    const contasBancariasOptions = useMemo(() =>
-        contasBancarias.map(c => ({ label: `${c.nomeConta} (${c.banco})`, value: c.id! })),
-    [contasBancarias]);
-
-    const produtosParaVendaOptions = useMemo(() => {
-        return produtos
-            .filter(p => p.tipoProduto === 'VENDA')
-            .map(p => {
-                const unidade = unidades.find(u => u.id === p.unidadeId);
-                const label = `${p.nome} (Estoque: ${p.quantidade || 0} ${unidade?.sigla || 'un'})`;
-                return { label, value: p.id! };
-            });
-    }, [produtos, unidades]);
-
-    const form = useForm<VendaFormValues>({
-        resolver: zodResolver(formVendaSchema),
-        defaultValues: defaultFormValues,
-        mode: "onChange",
-    });
-
+    const form = useForm<VendaFormValues>({ resolver: zodResolver(formVendaSchema), defaultValues: defaultFormValues, mode: "onChange" });
     const { fields, append, remove } = useFieldArray({ control: form.control, name: "produtos" });
 
-    const watchedCliente = useWatch({ control: form.control, name: 'clienteId'});
-    const watchedProdutos = useWatch({ control: form.control, name: 'produtos' });
     const condicaoPagamento = useWatch({ control: form.control, name: 'condicaoPagamento' });
     const metodoPagamento = useWatch({ control: form.control, name: 'metodoPagamento' });
-    const numeroParcelas = useWatch({ control: form.control, name: 'numeroParcelas' });
-    const taxaCartao = useWatch({ control: form.control, name: 'taxaCartao' });
     const valorTotal = useWatch({ control: form.control, name: 'valorTotal' });
+    const taxaCartao = useWatch({ control: form.control, name: 'taxaCartao' });
+    const numeroParcelas = useWatch({ control: form.control, name: 'numeroParcelas' });
 
-    const isPaymentDisabled = !watchedCliente || !watchedProdutos || watchedProdutos.length === 0;
+    const produtosParaVendaOptions = useMemo(() => produtos.filter(p => p.tipoProduto === 'VENDA').map(p => ({ label: `${p.nome} (Estoque: ${p.quantidade || 0} ${unidades.find(u => u.id === p.unidadeId)?.sigla || 'un'})`, value: p.id! })), [produtos, unidades]);
+    const clientesOptions = useMemo(() => clientes.map(c => ({ label: c.nome, value: c.id! })), [clientes]);
+    const contasBancariasOptions = useMemo(() => contasBancarias.map(c => ({ label: `${c.nomeConta} (${c.banco})`, value: c.id! })), [contasBancarias]);
 
     const dependenciasFaltantes = useMemo(() => {
         const faltantes = [];
-        if (!clientes || clientes.length === 0) {
-            faltantes.push({ nome: "Clientes", link: "/dashboard/clientes" });
-        }
-        if (!produtosParaVenda || produtosParaVenda.length === 0) {
-            faltantes.push({ nome: "Produtos de Venda", link: "/dashboard/produtos" });
-        }
+        if (!clientes || clientes.length === 0) faltantes.push({ nome: "Clientes", link: "/dashboard/clientes" });
+        if (produtos.filter(p => p.tipoProduto === 'VENDA').length === 0) faltantes.push({ nome: "Produtos de Venda", link: "/dashboard/produtos" });
         return faltantes;
-    }, [clientes, produtosParaVenda]);
-
-    const resetForm = () => {
-        form.reset(defaultFormValues);
-        remove();
-        setIsEditing(false);
-        setEditingId(null);
-    };
-
-    const handleEdit = (venda: VendaComDetalhes) => {
-        setIsEditing(true);
-        setEditingId(venda.id!);
-        form.reset({
-            ...venda,
-            dataVencimento: venda.dataVencimento || undefined,
-        });
-    };
+    }, [clientes, produtos]);
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 500);
-        return () => clearTimeout(timer);
-    }, []);
-
-    useEffect(() => {
-        const subscription = form.watch((value, { name }) => {
-            if (name === 'condicaoPagamento') {
-                const currentMethod = form.getValues('metodoPagamento');
-                const availableMethods = value.condicaoPagamento === 'A_VISTA'
-                    ? metodosPagamentoOptions.vista.map(m => m.value)
-                    : metodosPagamentoOptions.prazo.map(m => m.value);
-
-                if (currentMethod && !availableMethods.includes(currentMethod)) {
-                    form.setValue('metodoPagamento', '');
-                }
-            }
-        });
-        return () => subscription.unsubscribe();
-    }, [form]);
-
-    useEffect(() => {
-        const total = watchedProdutos.reduce((acc: number, item: Partial<ItemVendido>) => acc + ((item.quantidade || 0) * (item.precoUnitario || 0)), 0);
+        const total = form.getValues('produtos').reduce((acc, item) => acc + ((item.quantidade || 0) * (item.precoUnitario || 0)), 0);
         form.setValue('valorTotal', total);
-    }, [watchedProdutos, form]);
+    }, [form, form.watch('produtos')]);
 
     useEffect(() => {
         if (metodoPagamento === 'Cartão de Crédito' && valorTotal > 0) {
@@ -253,169 +198,148 @@ export default function VendasPage() {
     }, [valorTotal, metodoPagamento, taxaCartao]);
 
     const handleProdutoChange = (index: number, produtoId: string) => {
-        const produto = produtosParaVenda.find(p => p.id === produtoId);
-        if (produto && produto.tipoProduto === "VENDA") {
-            form.setValue(`produtos.${index}.produtoId`, produtoId);
-            form.setValue(`produtos.${index}.precoUnitario`, produto.precoVenda);
-            form.setValue(`produtos.${index}.produtoNome`, produto.nome);
-            form.setValue(`produtos.${index}.custoUnitario`, produto.custoUnitario || 0);
-            form.setValue(`produtos.${index}.estoqueDisponivel`, produto.quantidade || 0);
+        const produto = produtos.find(p => p.id === produtoId);
+        if (produto?.tipoProduto === "VENDA") {
+            form.setValue(`produtos.${index}`, {
+                produtoId, produtoNome: produto.nome, precoUnitario: produto.precoVenda,
+                custoUnitario: produto.custoUnitario || 0, estoqueDisponivel: produto.quantidade || 0, quantidade: 1
+            });
         }
     };
 
-    const onSubmit = async (values: VendaFormValues) => {
-        if (isEditing && editingId) {
-            try {
+    const resetForm = () => {
+        form.reset(defaultFormValues);
+        setIsEditing(false);
+        setEditingId(null);
+        setIsFormVisible(false);
+    }
+
+    const handleAddNew = () => {
+        resetForm();
+        setIsFormVisible(true);
+    };
+
+    const handleEdit = (venda: VendaComDetalhes) => {
+        if (isReadOnly) return;
+        setIsEditing(true); setEditingId(venda.id!);
+        form.reset({
+            ...venda, data: venda.data, dataVencimento: venda.dataVencimento || undefined,
+            produtos: venda.produtos.map(p => ({ ...p, estoqueDisponivel: produtos.find(prod => prod.id === p.produtoId)?.quantidade || 0 }))
+        });
+        setIsFormVisible(true);
+    };
+
+    const onSubmit: SubmitHandler<VendaFormValues> = async (values) => {
+        const toastId = toast.loading(isEditing ? "Atualizando venda..." : "Registrando venda...");
+        try {
+            if (isEditing && editingId) {
                 await updateVenda(editingId, { ...values, valorFinal: valorFinalCalculado });
-                toast.success("Venda atualizada com sucesso!");
-                resetForm();
-            } catch (error: any) {
-                toast.error("Falha ao atualizar venda", { description: "Atenção: A edição não altera o estoque. Para correções de estoque, realize uma movimentação manual." });
-            }
-        } else {
-            try {
+                toast.success("Venda atualizada com sucesso!", { id: toastId });
+            } else {
                 const cliente = clientes.find(c => c.id === values.clienteId);
-                if (!cliente) throw new Error("Cliente não encontrado.");
-                if (!user) throw new Error("Usuário não autenticado.");
-
+                if (!cliente || !user) throw new Error("Cliente ou usuário não encontrado.");
                 const dadosCompletos = { ...values, valorFinal: valorFinalCalculado, registradoPor: { uid: user.uid, nome: user.displayName || 'Usuário' } };
-
                 await registrarVenda(dadosCompletos as any, cliente.nome);
-                toast.success("Venda registrada com sucesso!");
-                resetForm();
-            } catch (error: any) {
-                toast.error("Falha ao registrar venda", { description: error.message });
+                toast.success("Venda registrada com sucesso!", { id: toastId });
             }
+            resetForm();
+        } catch (error: any) {
+            toast.error(error.message || "Falha ao salvar a venda.", { id: toastId });
         }
     };
 
-    const vendasEnriquecidas = useMemo(() => {
-        return vendas.map(venda => ({
-            ...venda,
-            clienteNome: clientes.find(c => c.id === venda.clienteId)?.nome || 'N/A',
-        }))
-    }, [vendas, clientes]);
+    const handlePrepareNFe = async (venda: VendaComDetalhes) => {
+        const toastId = toast.loading("Preparando dados da NF-e...");
+        try {
+            const cliente = clientes.find(c => c.id === venda.clienteId);
+            const empresaInfo = await getCompanyInfo();
+            if (!cliente || !empresaInfo) { throw new Error("Dados do cliente ou da empresa não encontrados."); }
+            setNfePreviewData({ venda, empresa: empresaInfo, cliente, todosProdutos: produtos, todasUnidades: unidades });
+            setIsNfeModalOpen(true);
+            toast.dismiss(toastId);
+        } catch (error: any) {
+            toast.error("Erro ao preparar NF-e", { id: toastId, description: error.message });
+        }
+    };
+
+    const handleConfirmAndEmitNFe = async (formData: { venda: Venda, empresa: CompanyInfo, cliente: Cliente, todosProdutos: Produto[], todasUnidades: Unidade[] }) => {
+        setIsEmittingNfe(true);
+        const toastId = toast.loading("Enviando dados para a Sefaz...");
+        try {
+            const resultado = await emitirNFe(formData.venda, formData.empresa, formData.cliente, formData.todosProdutos, formData.todasUnidades);
+            const nfeUpdateData = { id: resultado.ref, status: resultado.status, url_danfe: resultado.caminho_danfe, url_xml: resultado.caminho_xml_nota_fiscal };
+            await updateVenda(formData.venda.id!, { nfe: nfeUpdateData });
+
+            if (resultado.status === 'autorizado') { toast.success("NF-e autorizada com sucesso!", { id: toastId });
+            } else if (resultado.status === 'processando_autorizacao') { toast.info("NF-e em processamento. Consulte o status em breve.", { id: toastId });
+            } else { const errorMessage = resultado.erros ? resultado.erros[0].mensagem : (resultado.mensagem_sefaz || 'Erro desconhecido'); toast.error(`Falha na emissão: ${errorMessage}`, { id: toastId, duration: 10000 }); }
+
+            setIsNfeModalOpen(false);
+        } catch (error: any) {
+            toast.error("Erro ao emitir NF-e", { id: toastId, description: error.message });
+        } finally {
+            setIsEmittingNfe(false);
+        }
+    };
+
+    const vendasEnriquecidas = useMemo(() => vendas.map(venda => ({ ...venda, clienteNome: clientes.find(c => c.id === venda.clienteId)?.nome || 'N/A' })), [vendas, clientes]);
 
     const columns: ColumnDef<VendaComDetalhes>[] = [
-        { id: 'expander', header: () => null, cell: ({ row }) => (<Button variant="ghost" size="icon" onClick={() => row.toggleExpanded()} className="h-8 w-8">{row.getIsExpanded() ? <IconChevronUp className="h-4 w-4" /> : <IconChevronDown className="h-4 w-4" />}</Button>) },
         { header: "Data", accessorKey: "data", cell: ({ row }) => format(row.original.data, 'dd/MM/yyyy') },
         { header: "Cliente", accessorKey: "clienteNome" },
-        { header: "Registrado Por", accessorKey: "registradoPor.nome" },
-        { header: "Pagamento", cell: ({ row }) => (
-            <div>
-                <p className="font-medium">{row.original.metodoPagamento || (row.original.condicaoPagamento === 'A_PRAZO' ? 'Boleto/Prazo' : 'N/A')}</p>
-                {row.original.numeroParcelas && row.original.numeroParcelas > 1 && <p className="text-xs text-muted-foreground">{row.original.numeroParcelas}x</p>}
-            </div>
-        ) },
-        { header: "Status", accessorKey: "status", cell: ({ row }) => <Badge variant={row.original.status === 'Paga' ? 'default' : 'destructive'}>{row.original.status}</Badge> },
-        { header: "Valor Final", accessorKey: "valorFinal", cell: ({ row }) => `R$ ${(row.original.valorFinal || row.original.valorTotal).toFixed(2)}` },
-        {
-            id: "actions",
-            cell: ({ row }) => {
-                const venda = row.original;
-                return (
-                    <div className="text-right space-x-1">
-                        <Button variant="outline" size="icon" onClick={() => toast.info("Funcionalidade de NF-e em desenvolvimento.")}>
-                            <IconFileInvoice className="h-4 w-4" />
-                        </Button>
-                        {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(venda)}>
-                                <IconPencil className="h-4 w-4" />
-                            </Button>
-                        )}
-                    </div>
-                );
-            }
-        }
+        { header: "Valor Final", cell: ({ row }) => `R$ ${(row.original.valorFinal || row.original.valorTotal).toFixed(2)}` },
+        { header: "Pagamento", cell: ({ row }) => <Badge variant={row.original.status === 'Paga' ? 'success' : 'warning'}>{row.original.status}</Badge> },
+        { id: "nfe_status_action", header: "NF-e", cell: ({ row }) => <NfeActionButton venda={row.original} onPrepareNFe={handlePrepareNFe} /> },
+        { id: "edit_action", cell: ({ row }) => ( <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={isReadOnly}><IconPencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Editar Venda</p></TooltipContent></Tooltip></TooltipProvider> )}
     ];
 
-    const formContent = (
-        isLoading ? (
-            <div className="space-y-4">
-                <Skeleton className="h-40 w-full" />
-                <Skeleton className="h-40 w-full" />
-            </div>
-        ) :
-        dependenciasFaltantes.length > 0 ? (
-            <Alert variant="destructive">
-                <IconAlertTriangle className="h-4 w-4" />
-                <AlertTitle>Cadastro de pré-requisitos necessário</AlertTitle>
-                <AlertDescription>
-                    Para registrar uma venda, você precisa primeiro cadastrar:
-                    <ul className="list-disc pl-5 mt-2">
-                        {dependenciasFaltantes.map(dep => (
-                            <li key={dep.nome}>
-                                <Button variant="link" asChild className="p-0 h-auto font-bold"><Link href={dep.link}>{dep.nome}</Link></Button>
-                            </li>
-                        ))}
-                    </ul>
-                </AlertDescription>
-            </Alert>
-        ) : (
-             <Form {...form}>
-                <fieldset disabled={role !== 'ADMINISTRADOR'} className="space-y-6 disabled:opacity-70 disabled:pointer-events-none">
-                    <form onSubmit={form.handleSubmit(onSubmit)} id="venda-form">
-                        <Card className="mb-6">
-                            <CardHeader><CardTitle>{isEditing ? 'Editar Venda' : 'Dados da Venda'}</CardTitle>{!isEditing && (<CardDescription>Selecione o cliente, a data e os produtos vendidos.</CardDescription>)}</CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <FormField name="clienteId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cliente</FormLabel><Combobox options={clientesOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um cliente" searchPlaceholder="Buscar cliente..." /></FormItem>)} />
-                                    <FormField name="data" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data da Venda</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
-                                </div>
-                                <Separator />
-                                <div className="space-y-3">
-                                    <FormLabel>Produtos Vendidos</FormLabel>
-                                    {fields.map((field, index) => (<ItemProdutoVenda key={field.id} index={index} control={form.control} remove={remove} handleProdutoChange={handleProdutoChange} produtosParaVendaOptions={produtosParaVendaOptions} />))}
-                                    <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 1, precoUnitario: 0, produtoNome: "", custoUnitario: 0, estoqueDisponivel: 0, })}><IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto</Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader><CardTitle>Detalhes do Pagamento</CardTitle></CardHeader>
-                            <CardContent className="relative space-y-4">
-                                <fieldset disabled={isPaymentDisabled} className="space-y-4 disabled:opacity-50">
-                                    {isPaymentDisabled && (<div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center rounded-lg"><div className="flex items-center gap-2 text-muted-foreground font-medium"><IconLock className="h-5 w-5" /><span>Selecione cliente e produtos para continuar</span></div></div>)}
-                                    <div className="grid md:grid-cols-2 gap-4 items-start">
-                                        <FormField name="condicaoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Condição</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent><SelectItem value="A_VISTA">À Vista</SelectItem><SelectItem value="A_PRAZO">A Prazo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                                        {condicaoPagamento === "A_VISTA" ? (<FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.vista.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />) : (<div className="grid grid-cols-2 gap-4"><FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método de Pagamento</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.prazo.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><FormField name="dataVencimento" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Vencimento</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div>)}
-                                    </div>
-                                    <FormField name="contaBancariaId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Conta de Destino (Crédito)</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl><SelectContent>{contasBancariasOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormDescription>Selecione onde o valor da venda será creditado (apenas para vendas à vista).</FormDescription><FormMessage /></FormItem>)} />
-                                    {metodoPagamento === "Cartão de Crédito" && (<div className="grid md:grid-cols-3 gap-4 items-end pt-4"><FormField name="taxaCartao" control={form.control} render={({ field }) => (<FormItem><FormLabel>Taxa da Máquina (%)</FormLabel><FormControl><Input type="number" placeholder="Ex: 2.5" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl><FormMessage /></FormItem>)} /><FormField name="numeroParcelas" control={form.control} render={({ field }) => (<FormItem><FormLabel>Nº de Parcelas</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (<SelectItem key={p} value={String(p)}>{p}x</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><div className="text-right"><p className="text-sm text-muted-foreground">Valor da Parcela</p><p className="text-lg font-bold">R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}</p></div></div>)}
-                                    <div className="text-right mt-4 pt-4 border-t"><p className="text-sm text-muted-foreground">Valor Final da Venda</p><p className="text-2xl font-bold">R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}</p></div>
-                                </fieldset>
-                            </CardContent>
-                        </Card>
-                        <div className="flex justify-end pt-4 gap-2">
-                            {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                            <Button type="submit" form="venda-form" size="lg" disabled={isPaymentDisabled}>{isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}</Button>
-                        </div>
-                    </form>
-                </fieldset>
-                 {role !== 'ADMINISTRADOR' && (
-                    <Alert variant="destructive" className="mt-6">
-                        <IconLock className="h-4 w-4" />
-                        <AlertTitle>Acesso Restrito</AlertTitle>
-                        <AlertDescription>
-                            Apenas administradores podem registrar ou editar vendas.
-                        </AlertDescription>
-                    </Alert>
-                )}
-            </Form>
-        )
-    );
+    if (dependenciasFaltantes.length > 0) {
+        return ( <div className="container mx-auto py-8 px-4 md:px-6"><Alert variant="destructive"><AlertTitle>Cadastro de pré-requisito necessário</AlertTitle><AlertDescription>Para registrar uma venda, cadastre: <ul className="list-disc pl-5 mt-2">{dependenciasFaltantes.map(dep => (<li key={dep.nome}><Button variant="link" asChild className="p-0 h-auto font-bold"><Link href={dep.link}>{dep.nome}</Link></Button></li>))}</ul></AlertDescription></Alert></div> );
+    }
 
     return (
-        <div className="container mx-auto py-6 px-4 md:px-8">
-            <div className="grid grid-cols-1 xl:grid-cols-[2fr_3fr] gap-6 xl:gap-8 items-start">
-                <div className="space-y-6">{formContent}</div>
-                <Card className="h-full flex flex-col">
-                    <CardHeader className="pb-4"><CardTitle className="text-lg">Histórico de Vendas</CardTitle></CardHeader>
-                    <CardContent className="flex-1 flex flex-col gap-4">
-                        {isLoading ? (<div className="space-y-2"><Skeleton className="h-10 w-full" />{[...Array(5)].map((_, i) => (<Skeleton key={i} className="h-10 w-full" />))}</div>)
-                        : (<GenericTable columns={columns} data={vendasEnriquecidas} filterPlaceholder="Pesquisar por cliente..." filterColumnId="clienteNome" renderSubComponent={renderSubComponent} />)}
+        <div className="container mx-auto py-8 px-4 md:px-6 space-y-6">
+            <NfePreviewModal isOpen={isNfeModalOpen} onOpenChange={setIsNfeModalOpen} previewData={nfePreviewData} onSubmit={handleConfirmAndEmitNFe} isLoading={isEmittingNfe} />
+
+            {isFormVisible ? (
+                 <Card>
+                    <CardHeader><CardTitle>{isEditing ? "Editar Venda" : "Registrar Nova Venda"}</CardTitle><CardDescription>Preencha os detalhes abaixo.</CardDescription></CardHeader>
+                    <CardContent>
+                        <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(onSubmit)} id="venda-form" className="space-y-4">
+                                    <Accordion type="multiple" defaultValue={['item-1', 'item-2', 'item-3']} className="w-full">
+                                        <AccordionItem value="item-1">
+                                            <AccordionTrigger className="text-lg font-semibold">1. Dados Principais</AccordionTrigger>
+                                            <AccordionContent className="pt-4"><div className="grid md:grid-cols-2 gap-4"><FormField name="clienteId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cliente</FormLabel><Combobox options={clientesOptions} {...field} placeholder="Selecione um cliente" /></FormItem>)} /><FormField name="data" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data da Venda</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent>
+                                        </AccordionItem>
+                                        <AccordionItem value="item-2">
+                                            <AccordionTrigger className="text-lg font-semibold">2. Produtos</AccordionTrigger>
+                                            <AccordionContent className="pt-4 space-y-3"><FormLabel>Produtos Vendidos</FormLabel>{fields.map((field, index) => (<ItemProdutoVenda key={field.id} index={index} control={form.control} remove={remove} handleProdutoChange={handleProdutoChange} produtosParaVendaOptions={produtosParaVendaOptions} />))}<Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 1, precoUnitario: 0, produtoNome: "", custoUnitario: 0, estoqueDisponivel: 0, })}><IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto</Button></AccordionContent>
+                                        </AccordionItem>
+                                        <AccordionItem value="item-3">
+                                            <AccordionTrigger className="text-lg font-semibold">3. Pagamento</AccordionTrigger>
+                                            <AccordionContent className="pt-4 space-y-4"><div className="grid md:grid-cols-2 gap-4 items-start"><FormField name="condicaoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Condição</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="A_VISTA">À Vista</SelectItem><SelectItem value="A_PRAZO">A Prazo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />{condicaoPagamento === "A_VISTA" ? (<FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.vista.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />) : (<div className="grid grid-cols-2 gap-4"><FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.prazo.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><FormField name="dataVencimento" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Vencimento</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div>)}</div><FormField name="contaBancariaId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Conta de Destino</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl><SelectContent>{contasBancariasOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormDescription>Onde o valor da venda será creditado.</FormDescription><FormMessage /></FormItem>)} />{metodoPagamento === "Cartão de Crédito" && (<div className="grid md:grid-cols-3 gap-4 items-end pt-4"><FormField name="taxaCartao" control={form.control} render={({ field }) => (<FormItem><FormLabel>Taxa (%)</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl><FormMessage /></FormItem>)} /><FormField name="numeroParcelas" control={form.control} render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (<SelectItem key={p} value={String(p)}>{p}x</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><div className="text-right"><p className="text-sm text-muted-foreground">Valor Parcela</p><p className="text-lg font-bold">R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}</p></div></div>)}</AccordionContent>
+                                        </AccordionItem>
+                                    </Accordion>
+
+                                    <div className="flex justify-between items-center pt-4 border-t mt-8"><div><p className="text-sm text-muted-foreground">Valor Final da Venda</p><p className="text-3xl font-bold">R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}</p></div><div className="flex gap-2"><Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button><Button type="submit" size="lg" disabled={!form.formState.isValid}>{isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}</Button></div></div>
+                                </form>
+                            </Form>
+                        </fieldset>
+                    </CardContent>
+                 </Card>
+            ) : (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div><CardTitle>Histórico de Vendas</CardTitle><CardDescription>Visualize e gerencie todas as suas vendas.</CardDescription></div>
+                        <Button onClick={handleAddNew} disabled={isReadOnly}><IconPlus className="mr-2 h-4 w-4" /> Nova Venda</Button>
+                    </CardHeader>
+                    <CardContent>
+                        <GenericTable columns={columns} data={vendasEnriquecidas} filterPlaceholder="Pesquisar por cliente..." filterColumnId="clienteNome" renderSubComponent={renderSubComponent} />
                     </CardContent>
                 </Card>
-            </div>
+            )}
         </div>
     );
 }

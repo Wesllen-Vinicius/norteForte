@@ -1,18 +1,10 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where } from "firebase/firestore";
+import { Cargo } from "@/lib/schemas";
 
-export const cargoSchema = z.object({
-  id: z.string().optional(),
-  nome: z.string().min(3, "O nome do cargo deve ter pelo menos 3 caracteres."),
-  createdAt: z.any().optional(),
-});
-
-export type Cargo = z.infer<typeof cargoSchema>;
-
-export const addCargo = async (cargo: Omit<Cargo, 'id'>) => {
+export const addCargo = async (cargo: Omit<Cargo, 'id' | 'createdAt' | 'status'>) => {
   try {
-    const dataWithTimestamp = { ...cargo, createdAt: serverTimestamp() };
+    const dataWithTimestamp = { ...cargo, status: 'ativo', createdAt: serverTimestamp() };
     const docRef = await addDoc(collection(db, "cargos"), dataWithTimestamp);
     return docRef.id;
   } catch (e) {
@@ -22,7 +14,9 @@ export const addCargo = async (cargo: Omit<Cargo, 'id'>) => {
 };
 
 export const subscribeToCargos = (callback: (cargos: Cargo[]) => void) => {
-  const unsubscribe = onSnapshot(collection(db, "cargos"), (querySnapshot: QuerySnapshot<DocumentData>) => {
+  const q = query(collection(db, "cargos"), where("status", "==", "ativo"));
+
+  const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const cargos: Cargo[] = [];
     querySnapshot.forEach((doc) => {
       cargos.push({ id: doc.id, ...doc.data() as Omit<Cargo, 'id'> });
@@ -32,12 +26,21 @@ export const subscribeToCargos = (callback: (cargos: Cargo[]) => void) => {
   return unsubscribe;
 };
 
-export const updateCargo = async (id: string, cargo: Partial<Omit<Cargo, 'id'>>) => {
+export const updateCargo = async (id: string, cargo: Partial<Omit<Cargo, 'id' | 'createdAt' | 'status'>>) => {
   const cargoDoc = doc(db, "cargos", id);
   await updateDoc(cargoDoc, cargo);
 };
 
+// Nova função para inativar um cargo
+export const setCargoStatus = async (id: string, status: 'ativo' | 'inativo') => {
+    const cargoDoc = doc(db, "cargos", id);
+    await updateDoc(cargoDoc, { status });
+};
+
+// A função deleteCargo foi substituída pela setCargoStatus
+/*
 export const deleteCargo = async (id: string) => {
   const cargoDoc = doc(db, "cargos", id);
   await deleteDoc(cargoDoc);
 };
+*/

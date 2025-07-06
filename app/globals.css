@@ -165,3 +165,82 @@
 [data-slot="sidebar-content"]::-webkit-scrollbar {
   display: none;
 }
+
+
+/* Esconde o texto e o chevron quando a sidebar está no modo ícone */
+.group[data-state='collapsed'][data-collapsible='icon'] .sidebar-text,
+.group[data-state='collapsed'][data-collapsible='icon'] .sidebar-chevron {
+  display: none;
+}
+
+/* Centraliza os ícones quando a sidebar está recolhida */
+.group[data-state='collapsed'][data-collapsible='icon'] [data-slot='sidebar-menu-button'] {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+  width: 2.5rem; /* 40px */
+}
+
+.group[data-state='collapsed'][data-collapsible='icon'] [data-slot='sidebar-header'] {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Garante que o ícone do logo fique centralizado */
+.group[data-state='collapsed'][data-collapsible='icon'] [data-slot='sidebar-menu-button'] > a {
+    justify-content: center;
+}
+
+/* Adicionar ao final de app/globals.css */
+
+/* Animação e comportamento dos submenus */
+.submenu-content {
+  overflow: hidden;
+  transition: grid-template-rows 0.3s ease-in-out, opacity 0.2s ease-in-out;
+  display: grid;
+  grid-template-rows: 0fr; /* Inicia com altura 0 */
+  opacity: 0;
+}
+
+.submenu-content[data-state='open'] {
+  grid-template-rows: 1fr; /* Expande para a altura do conteúdo */
+  opacity: 1;
+}
+
+/* Esconde completamente o conteúdo do submenu quando a sidebar está recolhida */
+.group[data-state='collapsed'][data-collapsible='icon'] .submenu-content {
+  display: none;
+}
+
+
+/* Adicione ao final de app/globals.css */
+
+/* Esconde o texto e o chevron quando a sidebar está recolhida */
+[data-state='collapsed'] .sidebar-text,
+[data-state='collapsed'] .sidebar-chevron {
+  opacity: 0;
+  width: 0;
+  visibility: hidden;
+}
+
+/* Garante que o ícone fique centralizado no modo recolhido */
+[data-state='collapsed'] [data-slot='sidebar-menu-button'] {
+    justify-content: center;
+}
+
+/* Animação suave para o texto e chevron */
+.sidebar-text, .sidebar-chevron {
+  transition: opacity 0.2s ease-in-out, width 0.2s ease-in-out;
+  white-space: nowrap; /* Impede que o texto quebre a linha durante a animação */
+}
+
+/* Animação para o submenu (acordeão) */
+.submenu-content {
+  display: grid;
+  grid-template-rows: 0fr; /* Começa com altura 0 */
+  transition: grid-template-rows 0.3s ease-in-out;
+}
+
+.submenu-content[data-state='open'] {
+  grid-template-rows: 1fr; /* Expande para a altura total */
+}

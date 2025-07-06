@@ -163,5 +163,5 @@ export {
   FormControl,
   FormDescription,
   FormMessage,
-  FormField,
+  FormField, FormProvider,
 }

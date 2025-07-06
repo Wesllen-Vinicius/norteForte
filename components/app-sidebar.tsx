@@ -1,99 +1,185 @@
-"use client"
+'use client';
 
-import Link from "next/link";
-import * as React from "react"
-import { usePathname } from "next/navigation";
-import { useNavigationStore } from "@/store/navigation.store";
-import { IconArchive, IconShoppingCart, IconWallet, IconClipboardPlus, IconDashboard, IconInnerShadowTop, IconMeat, IconPackages, IconReportAnalytics, IconUserShield, IconUsers, IconUsersGroup, IconTruck, IconRuler, IconCategory, IconShoppingCartPlus, IconReceipt, IconUserCog, IconTargetArrow, IconBuildingBank } from "@tabler/icons-react"
-import { NavUser } from "@/components/nav-user"
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import {
+  Users, Building, Package, ShoppingCart, DollarSign, Banknote, Landmark, FileText,
+  Settings, LayoutDashboard, Boxes, Beef, LineChart, ChevronDown, User, Tags, Scale,
+  ClipboardList, UserCog, HeartHandshake, Archive, ShieldCheck
+} from 'lucide-react';
+import { IconInnerShadowTop } from '@tabler/icons-react';
 
-const navLinks = [
-  { title: "Dashboard", url: "/dashboard", icon: IconDashboard, group: "Análise" },
-  { title: "Relatórios", url: "/dashboard/relatorios", icon: IconReportAnalytics, group: "Análise" },
-  { title: "Vendas", url: "/dashboard/vendas", icon: IconShoppingCart, group: "Operacional" },
-  { title: "Compras", url: "/dashboard/compras", icon: IconShoppingCartPlus, group: "Operacional" },
-  { title: "Produção", url: "/dashboard/producao", icon: IconClipboardPlus, group: "Operacional" },
-  { title: "Abates", url: "/dashboard/abates", icon: IconMeat, group: "Operacional" },
-  { title: "Estoque", url: "/dashboard/estoque", icon: IconArchive, group: "Operacional" },
-  { title: "Contas a Pagar", url: "/dashboard/financeiro/contas-a-pagar", icon: IconReceipt, group: "Financeiro"},
-  { title: "Contas a Receber", url: "/dashboard/financeiro/contas-a-receber", icon: IconWallet, group: "Financeiro"},
-  { title: "Contas Bancárias", url: "/dashboard/financeiro/contas-bancarias", icon: IconBuildingBank, group: "Financeiro"},
-  { title: "Clientes", url: "/dashboard/clientes", icon: IconUsersGroup, group: "Cadastros" },
-  { title: "Fornecedores", url: "/dashboard/fornecedores", icon: IconTruck, group: "Cadastros" },
-  { title: "Prestadores", url: "/dashboard/funcionarios", icon: IconUsers, group: "Cadastros" },
-  { title: "Cargos", url: "/dashboard/cargos", icon: IconUserShield, group: "Cadastros" },
-  { title: "Produtos", url: "/dashboard/produtos", icon: IconPackages, group: "Cadastros" },
-  { title: "Unidades", url: "/dashboard/unidades", icon: IconRuler, group: "Cadastros" },
-  { title: "Categorias", url: "/dashboard/categorias", icon: IconCategory, group: "Cadastros" },
-  { title: "Metas de Produção", url: "/dashboard/metas", icon: IconTargetArrow, group: "Cadastros" },
-  { title: "Usuários", url: "/dashboard/usuarios", icon: IconUserCog, group: "Sistema" },
+import { cn } from '@/lib/utils';
+import { useNavigationStore } from '@/store/navigation.store';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
+} from '@/components/ui/sidebar';
+import { NavUser } from './nav-user';
+import { SidebarPinToggle } from './sidebar-pin-toggle';
+
+const navItems = [
+    { id: 'dashboard', href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    {
+        id: 'cadastros',
+        label: 'Cadastros',
+        icon: Users,
+        subItems: [
+            { id: 'clientes', href: '/dashboard/clientes', icon: HeartHandshake, label: 'Clientes' },
+            { id: 'fornecedores', href: '/dashboard/fornecedores', icon: Building, label: 'Fornecedores' },
+            { id: 'produtos', href: '/dashboard/produtos', icon: Package, label: 'Produtos' },
+            { id: 'funcionarios', href: '/dashboard/funcionarios', icon: User, label: 'Funcionários' },
+            { id: 'cargos', href: '/dashboard/cargos', icon: Tags, label: 'Cargos' },
+            { id: 'categorias', href: '/dashboard/categorias', icon: Boxes, label: 'Categorias' },
+            { id: 'unidades', href: '/dashboard/unidades', icon: Scale, label: 'Unidades' },
+        ],
+    },
+    {
+        id: 'operacional',
+        label: 'Operacional',
+        icon: Beef,
+        subItems: [
+            { id: 'compras', href: '/dashboard/compras', icon: ShoppingCart, label: 'Compras' },
+            { id: 'abates', href: '/dashboard/abates', icon: Beef, label: 'Abates' },
+            { id: 'producao', href: '/dashboard/producao', icon: Beef, label: 'Produção' },
+            { id: 'vendas', href: '/dashboard/vendas', icon: DollarSign, label: 'Vendas' },
+            { id: 'notas-fiscais', href: '/dashboard/notas-fiscais', icon: FileText, label: 'Notas Fiscais' },
+            { id: 'estoque', href: '/dashboard/estoque', icon: Archive, label: 'Estoque' },
+        ],
+    },
+    {
+        id: 'financeiro',
+        label: 'Financeiro',
+        icon: Landmark,
+        subItems: [
+            { id: 'contas-a-pagar', href: '/dashboard/financeiro/contas-a-pagar', icon: Banknote, label: 'Contas a Pagar' },
+            { id: 'contas-a-receber', href: '/dashboard/financeiro/contas-a-receber', icon: DollarSign, label: 'Contas a Receber' },
+            { id: 'despesas', href: '/dashboard/financeiro/despesas', icon: ClipboardList, label: 'Despesas' },
+            { id: 'fluxo-caixa', href: '/dashboard/financeiro/fluxo-caixa', icon: LineChart, label: 'Fluxo de Caixa' },
+            { id: 'contas-bancarias', href: '/dashboard/financeiro/contas-bancarias', icon: Landmark, label: 'Contas Bancárias' },
+        ],
+    },
+    { id: 'relatorios', href: '/dashboard/relatorios', icon: FileText, label: 'Relatórios' },
+    { id: 'metas', href: '/dashboard/metas', icon: LineChart, label: 'Metas' },
+    {
+        id: 'configuracoes',
+        label: 'Configurações',
+        icon: Settings,
+        subItems: [
+            { id: 'minha-conta', href: '/dashboard/account', icon: User, label: 'Minha Conta' },
+            { id: 'empresa', href: '/dashboard/settings', icon: Settings, label: 'Empresa' },
+            { id: 'usuarios', href: '/dashboard/usuarios', icon: UserCog, label: 'Usuários' },
+            { id: 'permissoes', href: '/dashboard/permissoes', icon: ShieldCheck, label: 'Funções e Permissões' },
+        ]
+    },
 ];
 
-const getGroupedNav = () => {
-    return navLinks.reduce((acc, item) => {
-        (acc[item.group] = acc[item.group] || []).push(item);
-        return acc;
-    }, {} as Record<string, typeof navLinks>);
-}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname();
-  const groupedNav = getGroupedNav();
-  const { setIsNavigating } = useNavigationStore();
+    const pathname = usePathname();
+    const { expandedMenus, toggleMenu, setIsNavigating } = useNavigationStore();
+    const { open, setOpen } = useSidebar();
+    const [isPinned, setIsPinned] = useState(false);
 
-  return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <SidebarMenuItem>
-            <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
-              <Link href="/dashboard">
-                <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Norte Forte</span>
-              </Link>
-            </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarHeader>
+    useEffect(() => {
+        const pinned = localStorage.getItem('sidebar-pinned') === 'true';
+        setIsPinned(pinned);
+        setOpen(pinned);
+    }, [setOpen]);
 
-      <SidebarContent>
-        {Object.entries(groupedNav).map(([group, items]) => (
-            <SidebarGroup key={group}>
-                <SidebarGroupLabel>{group}</SidebarGroupLabel>
+    const handleTogglePin = () => {
+        const newPinnedState = !isPinned;
+        setIsPinned(newPinnedState);
+        setOpen(newPinnedState);
+        localStorage.setItem('sidebar-pinned', String(newPinnedState));
+    };
+
+    const handleMouseEnter = () => {
+        if (!isPinned) setOpen(true);
+    };
+
+    const handleMouseLeave = () => {
+        if (!isPinned) setOpen(false);
+    };
+
+    const handleNavigation = (url: string) => {
+        if (url !== pathname) setIsNavigating(true);
+    };
+
+    const isSubMenuExpanded = (id: string) => expandedMenus.includes(id);
+
+    return (
+        <Sidebar onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} {...props}>
+            <SidebarHeader className="relative flex items-center justify-between">
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                        <Link href="/dashboard" onClick={() => handleNavigation('/dashboard')} className="!justify-start">
+                            <IconInnerShadowTop className="size-6 text-primary shrink-0" />
+                            <span className="sidebar-text text-lg font-semibold">Norte Forte</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarPinToggle isPinned={isPinned} onToggle={handleTogglePin} />
+            </SidebarHeader>
+
+            <SidebarContent>
                 <SidebarMenu>
-                    {items.map((item) => {
-                        const isActive = item.url === '/dashboard'
-                          ? pathname === item.url
-                          : pathname.startsWith(item.url);
-
-                        const handleClick = () => {
-                            if (item.url !== pathname) {
-                                setIsNavigating(true);
-                            }
-                        };
-
-                        return (
-                          <SidebarMenuItem key={item.title}>
-                              <SidebarMenuButton asChild tooltip={item.title} isActive={isActive}>
-                                  <Link
-                                      href={item.url}
-                                      onClick={handleClick}
-                                      aria-current={isActive ? "page" : undefined}
-                                  >
-                                      {item.icon && <item.icon />}
-                                      <span>{item.title}</span>
-                                  </Link>
-                              </SidebarMenuButton>
-                          </SidebarMenuItem>
+                    {navItems.map((item) =>
+                        item.subItems ? (
+                            <div key={item.id} className="w-full">
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton
+                                        onClick={() => toggleMenu(item.id)}
+                                        className="justify-between"
+                                        tooltip={item.label}
+                                        isActive={item.subItems.some(sub => pathname.startsWith(sub.href))}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <item.icon className="size-5 shrink-0" />
+                                            <span className="sidebar-text">{item.label}</span>
+                                        </div>
+                                        <ChevronDown className={cn('sidebar-chevron size-4 shrink-0 transform transition-transform duration-200', { 'rotate-180': isSubMenuExpanded(item.id) })} />
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                                {isSubMenuExpanded(item.id) && open && (
+                                    <div className="mt-1 flex flex-col gap-1 pl-5 border-l ml-[1.125rem] border-sidebar-border">
+                                        {item.subItems.map((subItem) => (
+                                            <SidebarMenuItem key={subItem.id}>
+                                                <SidebarMenuButton asChild tooltip={subItem.label} isActive={pathname === subItem.href}>
+                                                    <Link href={subItem.href} onClick={() => handleNavigation(subItem.href)}>
+                                                        <subItem.icon className="size-4 shrink-0" />
+                                                        <span className="sidebar-text">{subItem.label}</span>
+                                                    </Link>
+                                                </SidebarMenuButton>
+                                            </SidebarMenuItem>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <SidebarMenuItem key={item.id}>
+                                <SidebarMenuButton asChild tooltip={item.label} isActive={pathname === item.href}>
+                                    <Link href={item.href} onClick={() => handleNavigation(item.href)}>
+                                        <item.icon className="size-5 shrink-0" />
+                                        <span className="sidebar-text">{item.label}</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                         )
-                    })}
+                    )}
                 </SidebarMenu>
-            </SidebarGroup>
-        ))}
-      </SidebarContent>
+            </SidebarContent>
 
-      <SidebarFooter>
-        <NavUser />
-      </SidebarFooter>
-    </Sidebar>
-  )
+            <SidebarFooter>
+                <NavUser />
+            </SidebarFooter>
+        </Sidebar>
+    );
 }

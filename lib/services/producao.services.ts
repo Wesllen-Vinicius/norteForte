@@ -1,67 +1,33 @@
 import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, onSnapshot, QuerySnapshot, DocumentData, Timestamp, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp, onSnapshot, QuerySnapshot, DocumentData, Timestamp, updateDoc, query, where, orderBy } from "firebase/firestore";
 import { z } from "zod";
+import { Producao, producaoSchema, ProducaoFormValues } from "@/lib/schemas";
 
-// Schema para os itens, garantindo que quantidade seja um número
-const itemProduzidoSchema = z.object({
-  produtoId: z.string().min(1, "Selecione um produto."),
-  produtoNome: z.string(),
-  quantidade: z.coerce.number().min(0, "A quantidade deve ser um número positivo."),
-  perda: z.coerce.number().min(0, "A perda não pode ser negativa.").default(0),
-});
-
-// Schema principal da produção, aceitando Timestamp do Firebase e Date do formulário
-export const producaoSchema = z.object({
-  id: z.string().optional(),
-  data: z.union([z.instanceof(Timestamp), z.date()]),
-  responsavelId: z.string().min(1, "Selecione um responsável."),
-  abateId: z.string().min(1, "Selecione um abate para vincular."),
-  lote: z.string().optional(),
-  descricao: z.string().optional(),
-  produtos: z.array(itemProduzidoSchema).min(1, "Adicione pelo menos um produto à produção."),
-  registradoPor: z.object({
-    uid: z.string(),
-    nome: z.string(),
-  }),
-  createdAt: z.any().optional(),
-});
-
-// Tipo usado na aplicação, garantindo que 'data' seja sempre um objeto Date
-export type Producao = Omit<z.infer<typeof producaoSchema>, 'data'> & { data: Date };
-
-/**
- * Registra um novo lote de produção e atualiza o estoque dos produtos.
- * A transação é estruturada em duas etapas (leitura e escrita) para cumprir as regras do Firestore.
- */
-export const registrarProducao = async (producaoData: Omit<Producao, 'id' | 'createdAt'>) => {
+export const registrarProducao = async (producaoData: ProducaoFormValues, user: { uid: string; nome: string; role?: 'ADMINISTRADOR' | 'USUARIO' }) => {
   try {
     await runTransaction(db, async (transaction) => {
-      // --- ETAPA DE LEITURA ---
-      const produtoRefs = producaoData.produtos.map(item => doc(db, "produtos", item.produtoId));
-      const produtoDocs = await Promise.all(produtoRefs.map(ref => transaction.get(ref)));
-
-      for (let i = 0; i < produtoDocs.length; i++) {
-        if (!produtoDocs[i].exists()) {
-          throw new Error(`Produto "${producaoData.produtos[i].produtoNome}" não foi encontrado.`);
-        }
-      }
-
-      // --- ETAPA DE ESCRITA ---
       const producaoDocRef = doc(collection(db, "producoes"));
-      transaction.set(producaoDocRef, {
-        ...producaoData,
-        data: Timestamp.fromDate(producaoData.data), // Salva como Timestamp
-        createdAt: serverTimestamp(),
-      });
 
-      for (let i = 0; i < produtoDocs.length; i++) {
-        const produtoDoc = produtoDocs[i];
-        const item = producaoData.produtos[i];
+      const dataToSave = {
+        ...producaoData,
+        data: Timestamp.fromDate(producaoData.data),
+        registradoPor: user,
+        status: 'ativo',
+        createdAt: serverTimestamp(),
+      };
+      transaction.set(producaoDocRef, dataToSave);
+
+      for (const item of producaoData.produtos) {
+        const produtoRef = doc(db, "produtos", item.produtoId);
+        const produtoDoc = await transaction.get(produtoRef);
+
+        if (!produtoDoc.exists()) {
+          throw new Error(`Produto "${item.produtoNome}" não foi encontrado.`);
+        }
 
         const estoqueAtual = produtoDoc.data()!.quantidade || 0;
         const novoEstoque = estoqueAtual + item.quantidade;
-
-        transaction.update(produtoRefs[i], { quantidade: novoEstoque });
+        transaction.update(produtoRef, { quantidade: novoEstoque });
 
         const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
         transaction.set(movimentacaoDocRef, {
@@ -69,7 +35,7 @@ export const registrarProducao = async (producaoData: Omit<Producao, 'id' | 'cre
           produtoNome: item.produtoNome,
           quantidade: item.quantidade,
           tipo: 'entrada',
-          motivo: `Produção Lote: ${producaoData.lote || producaoDocRef.id}`,
+          motivo: `Produção Lote: ${producaoData.lote || producaoDocRef.id.slice(-5)}`,
           data: serverTimestamp(),
         });
       }
@@ -80,32 +46,36 @@ export const registrarProducao = async (producaoData: Omit<Producao, 'id' | 'cre
   }
 };
 
-/**
- * Escuta por atualizações na coleção de produções, validando e formatando os dados.
- */
 export const subscribeToProducoes = (callback: (producoes: Producao[]) => void) => {
-    const unsubscribe = onSnapshot(collection(db, "producoes"), (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const q = query(collection(db, "producoes"));
+
+    return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
       const producoes: Producao[] = [];
       querySnapshot.forEach((doc) => {
-        const rawData = { id: doc.id, ...doc.data() };
-        const parsed = producaoSchema.safeParse(rawData);
+        const docData = doc.data();
 
+        const dataToParse = {
+            id: doc.id,
+            ...docData,
+            data: docData.data instanceof Timestamp ? docData.data.toDate() : docData.data,
+        };
+
+        const parsed = producaoSchema.safeParse(dataToParse);
         if(parsed.success) {
-            const finalData = {
-                ...parsed.data,
-                data: (parsed.data.data as Timestamp).toDate(),
-            };
-            producoes.push(finalData as Producao);
+            producoes.push(parsed.data);
         } else {
             console.error("Documento de produção inválido no Firestore:", doc.id, parsed.error.format());
         }
       });
-      callback(producoes.sort((a, b) => b.data.getTime() - a.data.getTime()));
+
+      const filtered = producoes.filter(p => p.status !== 'inativo');
+      callback(filtered.sort((a, b) => (a.data as Date).getTime() - (b.data as Date).getTime()));
+    }, (error) => {
+      console.error("Erro no listener de Produções:", error);
     });
-    return unsubscribe;
 };
 
-export const updateProducao = async (id: string, data: Partial<Omit<Producao, 'id' | 'createdAt'>>) => {
+export const updateProducao = async (id: string, data: Partial<ProducaoFormValues>) => {
     const producaoDoc = doc(db, "producoes", id);
     const dataToUpdate: { [key: string]: any } = { ...data };
     if (data.data) {
@@ -114,7 +84,7 @@ export const updateProducao = async (id: string, data: Partial<Omit<Producao, 'i
     await updateDoc(producaoDoc, dataToUpdate);
 };
 
-export const deleteProducao = async (id: string) => {
+export const setProducaoStatus = async (id: string, status: 'ativo' | 'inativo') => {
     const producaoDoc = doc(db, "producoes", id);
-    await deleteDoc(producaoDoc);
+    await updateDoc(producaoDoc, { status });
 };

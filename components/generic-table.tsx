@@ -14,6 +14,7 @@ import {
   getExpandedRowModel,
   Row,
 } from "@tanstack/react-table";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,8 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "./ui/input";
+import { TruncatedCell } from "./ui/truncated-cell";
 
-// Definindo as propriedades diretamente na função para melhor inferência
 interface GenericTableProps<TData extends object> {
     data: TData[];
     columns: ColumnDef<TData, any>[];
@@ -36,7 +37,6 @@ interface GenericTableProps<TData extends object> {
     tableControlsComponent?: React.ReactNode;
 }
 
-// CORREÇÃO: Adicionando a restrição "extends object" ao tipo genérico TData
 export function GenericTable<TData extends object>({
   columns,
   data,
@@ -49,9 +49,29 @@ export function GenericTable<TData extends object>({
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
 
+  const tableColumns = React.useMemo<ColumnDef<TData>[]>(() => {
+    if (!renderSubComponent) return columns;
+
+    const expanderColumn: ColumnDef<TData> = {
+      id: 'expander',
+      header: () => null,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={row.getToggleExpandedHandler()}
+          className="h-8 w-8"
+        >
+          {row.getIsExpanded() ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+        </Button>
+      ),
+    };
+    return [expanderColumn, ...columns];
+  }, [columns, renderSubComponent]);
+
   const table = useReactTable({
     data,
-    columns,
+    columns: tableColumns,
     state: {
       sorting,
       globalFilter,
@@ -59,20 +79,19 @@ export function GenericTable<TData extends object>({
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    onExpandedChange: (updater) => {
-        setExpanded((prev) => (typeof updater === 'function' ? updater(prev) : updater));
-    },
+    getRowCanExpand: () => !!renderSubComponent,
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center">
-        {filterPlaceholder && filterColumnId && (
+        {filterPlaceholder && (
             <Input
                 placeholder={filterPlaceholder}
                 value={globalFilter}
@@ -107,17 +126,26 @@ export function GenericTable<TData extends object>({
                 <React.Fragment key={row.id}>
                     <TableRow data-state={row.getIsSelected() && "selected"}>
                         {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                            {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
+                        <TableCell key={cell.id} className="max-w-[250px]">
+                            {cell.column.id !== 'actions' && cell.column.id !== 'expander' ? (
+                                <TruncatedCell>
+                                    {flexRender(
+                                        cell.column.columnDef.cell,
+                                        cell.getContext()
+                                    )}
+                                </TruncatedCell>
+                            ) : (
+                                flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext()
+                                )
                             )}
                         </TableCell>
                         ))}
                     </TableRow>
                     {row.getIsExpanded() && renderSubComponent && (
                         <TableRow>
-                            <TableCell colSpan={row.getVisibleCells().length} className="p-0">
+                            <TableCell colSpan={row.getVisibleCells().length} className="p-0 bg-muted/20">
                                 {renderSubComponent({ row })}
                             </TableCell>
                         </TableRow>
@@ -127,7 +155,7 @@ export function GenericTable<TData extends object>({
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={columns.length}
+                  colSpan={columns.length + (renderSubComponent ? 1 : 0)}
                   className="h-24 text-center"
                 >
                   Nenhum resultado para os filtros aplicados.

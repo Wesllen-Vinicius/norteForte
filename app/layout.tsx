@@ -12,7 +12,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isLoginPage = pathname === '/login';
 
   return (
-    // A única mudança é aqui, na tag <html>
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <AuthProvider>

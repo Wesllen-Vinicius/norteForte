@@ -1,4 +1,3 @@
-// lib/services/auth.services.ts
 import { auth } from '@/lib/firebase';
 import {
     signInWithEmailAndPassword,
@@ -6,15 +5,9 @@ import {
     GoogleAuthProvider,
     signInWithPopup,
     createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
 } from 'firebase/auth';
-import { z } from 'zod';
-
-export const loginSchema = z.object({
-    email: z.string().email("Por favor, insira um e-mail válido."),
-    password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-});
-
-type LoginValues = z.infer<typeof loginSchema>;
+import { LoginValues } from '@/lib/schemas';
 
 export const signInWithEmail = async ({ email, password }: LoginValues) => {
     return signInWithEmailAndPassword(auth, email, password);
@@ -43,4 +36,8 @@ export const createUserInAuth = async (email: string, password: string): Promise
         console.error("Erro ao criar usuário na autenticação:", error);
         throw new Error('Não foi possível criar o acesso para o usuário.');
     }
+};
+
+export const sendPasswordReset = async (email: string) => {
+    return sendPasswordResetEmail(auth, email);
 };

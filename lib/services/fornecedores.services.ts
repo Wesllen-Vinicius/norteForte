@@ -1,30 +1,11 @@
 // lib/services/fornecedores.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, QuerySnapshot, DocumentData, serverTimestamp } from "firebase/firestore";
-import { z } from "zod";
+import { collection, addDoc, onSnapshot, doc, updateDoc, QuerySnapshot, DocumentData, serverTimestamp, query, where } from "firebase/firestore";
+import { Fornecedor } from "@/lib/schemas";
 
-const dadosBancariosSchema = z.object({
-  banco: z.string().min(1, "O nome do banco é obrigatório."),
-  agencia: z.string().min(1, "A agência é obrigatória."),
-  conta: z.string().min(1, "A conta é obrigatória."),
-  pix: z.string().optional().or(z.literal("")),
-});
-
-export const fornecedorSchema = z.object({
-  id: z.string().optional(),
-  razaoSocial: z.string().min(3, "A Razão Social é obrigatória."),
-  cnpj: z.string().length(18, "O CNPJ deve ter 14 dígitos."),
-  contato: z.string().min(10, "O telefone de contato é obrigatório."),
-  endereco: z.string().min(5, "O endereço é obrigatório."),
-  dadosBancarios: dadosBancariosSchema,
-  createdAt: z.any().optional(), // Adicionado para controle de permissão
-});
-
-export type Fornecedor = z.infer<typeof fornecedorSchema>;
-
-export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id' | 'createdAt'>) => {
+export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id' | 'createdAt' | 'status'>) => {
   try {
-    const dataWithTimestamp = { ...fornecedor, createdAt: serverTimestamp() };
+    const dataWithTimestamp = { ...fornecedor, status: 'ativo', createdAt: serverTimestamp() };
     const docRef = await addDoc(collection(db, "fornecedores"), dataWithTimestamp);
     return docRef.id;
   } catch (e) {
@@ -33,8 +14,24 @@ export const addFornecedor = async (fornecedor: Omit<Fornecedor, 'id' | 'created
   }
 };
 
+// **NOVA FUNÇÃO** para buscar fornecedores por status
+export const subscribeToFornecedoresByStatus = (status: 'ativo' | 'inativo', callback: (fornecedores: Fornecedor[]) => void) => {
+  const q = query(collection(db, "fornecedores"), where("status", "==", status));
+
+  return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+    const fornecedores: Fornecedor[] = [];
+    querySnapshot.forEach((doc) => {
+      fornecedores.push({ id: doc.id, ...doc.data() as Omit<Fornecedor, 'id'> });
+    });
+    callback(fornecedores);
+  });
+};
+
+// Função antiga mantida para compatibilidade, se necessário, ou pode ser removida.
 export const subscribeToFornecedores = (callback: (fornecedores: Fornecedor[]) => void) => {
-  const unsubscribe = onSnapshot(collection(db, "fornecedores"), (querySnapshot: QuerySnapshot<DocumentData>) => {
+  const q = query(collection(db, "fornecedores"), where("status", "==", "ativo"));
+
+  const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
     const fornecedores: Fornecedor[] = [];
     querySnapshot.forEach((doc) => {
       fornecedores.push({ id: doc.id, ...doc.data() as Omit<Fornecedor, 'id'> });
@@ -44,12 +41,12 @@ export const subscribeToFornecedores = (callback: (fornecedores: Fornecedor[]) =
   return unsubscribe;
 };
 
-export const updateFornecedor = async (id: string, fornecedor: Partial<Omit<Fornecedor, 'id'>>) => {
+export const updateFornecedor = async (id: string, fornecedor: Partial<Omit<Fornecedor, 'id' | 'createdAt' | 'status'>>) => {
   const fornecedorDoc = doc(db, "fornecedores", id);
   await updateDoc(fornecedorDoc, fornecedor);
 };
 
-export const deleteFornecedor = async (id: string) => {
-  const fornecedorDoc = doc(db, "fornecedores", id);
-  await deleteDoc(fornecedorDoc);
-};
+export const setFornecedorStatus = async (id: string, status: 'ativo' | 'inativo') => {
+    const fornecedorDoc = doc(db, "fornecedores", id);
+    await updateDoc(fornecedorDoc, { status });
+}

@@ -1,11 +1,13 @@
-// lib/services/dashboard.services.ts
 import { db } from "@/lib/firebase";
 import { collection, getCountFromServer, getDocs, query, where, Timestamp, orderBy } from "firebase/firestore";
 import { format } from 'date-fns';
+import { useDataStore } from "@/store/data.store";
+import { Producao, Movimentacao, Venda } from "@/lib/schemas";
 
 const getCollectionCount = async (collectionName: string) => {
     const coll = collection(db, collectionName);
-    const snapshot = await getCountFromServer(coll);
+    const q = query(coll, where("status", "==", "ativo")); // Considera apenas ativos
+    const snapshot = await getCountFromServer(q);
     return snapshot.data().count;
 };
 
@@ -20,12 +22,12 @@ const getVendasMes = async () => {
     let lucroBruto = 0;
 
     querySnapshot.forEach(doc => {
-        const venda = doc.data();
+        const venda = doc.data() as Venda;
         if (venda && typeof venda.valorTotal === 'number') {
             valorTotal += venda.valorTotal;
         }
         if (Array.isArray(venda.produtos)) {
-            venda.produtos.forEach((item: any) => {
+            venda.produtos.forEach((item) => {
                 if (typeof item.precoUnitario === 'number' && typeof item.custoUnitario === 'number' && typeof item.quantidade === 'number') {
                     lucroBruto += (item.precoUnitario - item.custoUnitario) * item.quantidade;
                 }
@@ -38,16 +40,22 @@ const getVendasMes = async () => {
 const getContasResumo = async () => {
     const contasAPagarRef = collection(db, "contasAPagar");
     const contasAReceberRef = collection(db, "contasAReceber");
+    const despesasRef = collection(db, "despesas"); // Adicionado
 
     const qPagar = query(contasAPagarRef, where("status", "==", "Pendente"));
     const qReceber = query(contasAReceberRef, where("status", "==", "Pendente"));
+    const qDespesas = query(despesasRef, where("status", "==", "Pendente")); // Adicionado
 
-    const [pagarSnapshot, receberSnapshot] = await Promise.all([
+    const [pagarSnapshot, receberSnapshot, despesasSnapshot] = await Promise.all([
         getDocs(qPagar),
-        getDocs(qReceber)
+        getDocs(qReceber),
+        getDocs(qDespesas) // Adicionado
     ]);
 
-    const totalAPagar = pagarSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalComprasAPagar = pagarSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalDespesasAPagar = despesasSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
+    const totalAPagar = totalComprasAPagar + totalDespesasAPagar; // Soma de compras e despesas
+
     const totalAReceber = receberSnapshot.docs.reduce((sum, doc) => sum + (doc.data().valor || 0), 0);
 
     return { totalAPagar, totalAReceber };
@@ -85,12 +93,23 @@ export const getMovimentacoesParaGrafico = async () => {
     );
 
     const querySnapshot = await getDocs(q);
+    const { produtos, unidades } = useDataStore.getState();
     const agregados: { [key: string]: { entradas: number; saidas: number } } = {};
 
     querySnapshot.forEach(doc => {
-        const mov = doc.data();
-        if (mov.data && typeof mov.data.toDate === 'function') {
-            const data = mov.data.toDate();
+        const mov = doc.data() as Movimentacao;
+        const produto = produtos.find(p => p.id === mov.produtoId);
+
+        let unidadeSigla = 'un';
+        if (produto && (produto.tipoProduto === 'VENDA' || produto.tipoProduto === 'MATERIA_PRIMA') && produto.unidadeId) {
+            unidadeSigla = unidades.find(u => u.id === produto.unidadeId)?.sigla || 'un';
+        }
+
+        if (unidadeSigla.toLowerCase() !== 'kg') return;
+
+        const movData = mov.data as unknown;
+        if (movData instanceof Timestamp) {
+            const data = movData.toDate();
             const diaFormatado = format(data, "yyyy-MM-dd");
 
             if (!agregados[diaFormatado]) {
@@ -110,6 +129,7 @@ export const getMovimentacoesParaGrafico = async () => {
         ...values
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 };
+
 
 export const getProdutosMaisVendidos = async () => {
     const vendasRef = collection(db, "vendas");
@@ -163,22 +183,37 @@ export const getProducaoResumoPeriodo = async () => {
     const trintaDiasAtras = new Date(new Date().setDate(hoje.getDate() - 30));
     const q = query(producoesRef, where("data", ">=", Timestamp.fromDate(trintaDiasAtras)));
     const querySnapshot = await getDocs(q);
+    const { produtos, unidades } = useDataStore.getState();
 
-    let produzido = 0;
-    let perdas = 0;
+    const totais: { produzido: { [key: string]: number }, perdas: { [key: string]: number } } = {
+        produzido: {},
+        perdas: {},
+    };
 
     querySnapshot.forEach(doc => {
-        const producao = doc.data();
+        const producao = doc.data() as Producao;
         if(Array.isArray(producao.produtos)) {
-            producao.produtos.forEach((item: any) => {
-                produzido += item.quantidade || 0;
-                perdas += item.perda || 0;
+            producao.produtos.forEach((item) => {
+                const produtoInfo = produtos.find(p => p.id === item.produtoId);
+                let unidadeSigla = 'un';
+                if (produtoInfo && (produtoInfo.tipoProduto === 'VENDA' || produtoInfo.tipoProduto === 'MATERIA_PRIMA') && produtoInfo.unidadeId) {
+                    unidadeSigla = unidades.find(u => u.id === produtoInfo.unidadeId)?.sigla || 'un';
+                }
+
+                if (!totais.produzido[unidadeSigla]) totais.produzido[unidadeSigla] = 0;
+                if (!totais.perdas[unidadeSigla]) totais.perdas[unidadeSigla] = 0;
+
+                totais.produzido[unidadeSigla] += item.quantidade || 0;
+                totais.perdas[unidadeSigla] += item.perda || 0;
             });
         }
     });
 
+    const unidadePrincipal = 'kg';
+    const produzido = totais.produzido[unidadePrincipal] || Object.values(totais.produzido)[0] || 0;
+    const perdas = totais.perdas[unidadePrincipal] || Object.values(totais.perdas)[0] || 0;
     const total = produzido + perdas;
     const rendimento = total > 0 ? (produzido / total) * 100 : 0;
 
-    return { produzido, perdas, rendimento };
+    return { produzido, perdas, rendimento, totais };
 }

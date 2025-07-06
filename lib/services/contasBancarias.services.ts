@@ -1,25 +1,30 @@
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, runTransaction } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, where, runTransaction } from "firebase/firestore";
 import { ContaBancaria } from "@/lib/schemas";
 import { User } from "firebase/auth";
 
-type ContaBancariaPayload = Omit<ContaBancaria, 'id' | 'createdAt' | 'saldoAtual' | 'registradoPor'>;
+type ContaBancariaPayload = Omit<ContaBancaria, 'id' | 'createdAt' | 'saldoAtual' | 'registradoPor' | 'status'>;
 
 export const addContaBancaria = (data: ContaBancariaPayload, user: { uid: string, nome: string }) => {
   const dataComTimestamp = {
     ...data,
     saldoAtual: data.saldoInicial,
     registradoPor: user,
+    status: 'ativa',
     createdAt: serverTimestamp(),
   };
   return addDoc(collection(db, "contasBancarias"), dataComTimestamp);
 };
 
 export const subscribeToContasBancarias = (callback: (contas: ContaBancaria[]) => void) => {
-  const q = query(collection(db, "contasBancarias"), orderBy("nomeConta", "asc"));
+  // CORREÇÃO: Removido o orderBy da consulta para evitar o erro de índice.
+  const q = query(collection(db, "contasBancarias"), where("status", "==", "ativa"));
+
   return onSnapshot(q, (snapshot) => {
     const contas = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) as ContaBancaria[];
-    callback(contas);
+    // A ordenação agora é feita no lado do cliente.
+    const contasOrdenadas = contas.sort((a, b) => a.nomeConta.localeCompare(b.nomeConta));
+    callback(contasOrdenadas);
   });
 };
 
@@ -27,8 +32,9 @@ export const updateContaBancaria = (id: string, data: Partial<ContaBancariaPaylo
   return updateDoc(doc(db, "contasBancarias", id), data);
 };
 
-export const deleteContaBancaria = (id: string) => {
-  return deleteDoc(doc(db, "contasBancarias", id));
+export const setContaBancariaStatus = async (id: string, status: 'ativa' | 'inativa') => {
+    const contaDoc = doc(db, "contasBancarias", id);
+    await updateDoc(contaDoc, { status });
 };
 
 export const registrarMovimentacaoBancaria = async (

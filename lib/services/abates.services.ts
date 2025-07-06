@@ -1,91 +1,85 @@
-// wesllen-vinicius/norteforte/norteForte-dev/lib/services/abates.services.ts
 import { db } from "@/lib/firebase";
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, Query, query, where, QuerySnapshot, DocumentData, Timestamp, orderBy } from "firebase/firestore";
-import { z } from "zod";
+import { collection, onSnapshot, doc, updateDoc, serverTimestamp, Query, query, where, QuerySnapshot, DocumentData, Timestamp, addDoc } from "firebase/firestore";
 import { DateRange } from "react-day-picker";
+import { z } from "zod";
+import { Abate, abateSchema } from "@/lib/schemas";
 
-export const abateSchema = z.object({
-  id: z.string().optional(),
-  data: z.date({ required_error: "A data é obrigatória." }),
-  total: z.coerce.number().positive("O total de animais deve ser maior que zero."),
-  condenado: z.coerce.number().min(0, "A quantidade de condenados não pode ser negativa."),
-  responsavelId: z.string().min(1, "O responsável pelo abate é obrigatório."),
-  registradoPor: z.object({
-    uid: z.string(),
-    nome: z.string(),
-    role: z.enum(['ADMINISTRADOR', 'USUARIO']).optional(),
-  }),
-  createdAt: z.any().optional(),
+const formSchema = abateSchema.pick({
+  data: true,
+  total: true,
+  condenado: true,
+  responsavelId: true,
+  compraId: true,
 });
+type AbateFormValues = z.infer<typeof formSchema>;
 
-export type Abate = z.infer<typeof abateSchema>;
-
-// Adiciona um novo abate no banco de dados
-export const addAbate = async (abate: Omit<Abate, 'id' | 'createdAt'>) => {
+export const addAbate = async (formValues: AbateFormValues, user: { uid: string, nome: string, role: 'ADMINISTRADOR' | 'USUARIO' }) => {
   try {
-    const dataWithTimestamp = {
-        ...abate,
-        createdAt: serverTimestamp(),
+    const dataToSave = {
+      ...formValues,
+      registradoPor: user,
+      status: 'ativo',
+      createdAt: serverTimestamp(),
+      data: Timestamp.fromDate(formValues.data),
     };
-    await addDoc(collection(db, "abates"), dataWithTimestamp);
+    await addDoc(collection(db, "abates"), dataToSave);
   } catch (e) {
     console.error("Erro ao adicionar abate: ", e);
     throw new Error("Não foi possível adicionar o registro de abate.");
   }
 };
 
-// Listener para atualizações em tempo real para o data.store
-export const subscribeToAbates = (callback: (abates: Abate[]) => void) => {
-  const q = query(collection(db, "abates"), orderBy("data", "desc"));
-  const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
-    const abates: Abate[] = [];
-    querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        abates.push({
-            id: doc.id,
-            ...data,
-            data: data.data.toDate()
-        } as Abate);
-    });
-    callback(abates);
-  });
-  return unsubscribe;
-};
-
-// Listener otimizado para a página de abates, com filtro de data
 export const subscribeToAbatesByDateRange = (dateRange: DateRange | undefined, callback: (abates: Abate[]) => void) => {
-  let q: Query<DocumentData> = query(collection(db, "abates"), orderBy("data", "desc"));
-
-  if (dateRange?.from) {
-    const fromDate = Timestamp.fromDate(dateRange.from);
-    const toDate = dateRange.to ? Timestamp.fromDate(new Date(dateRange.to.setHours(23, 59, 59, 999))) : Timestamp.fromDate(new Date(dateRange.from.setHours(23, 59, 59, 999)));
-    q = query(q, where("data", ">=", fromDate), where("data", "<=", toDate));
-  }
+  const q = query(collection(db, "abates"));
 
   const unsubscribe = onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
-    const abates: Abate[] = [];
+    let abates: Abate[] = [];
     querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        abates.push({
+        const docData = doc.data();
+        const dataToParse = {
             id: doc.id,
-            ...data,
-            data: data.data.toDate()
-        } as Abate);
+            ...docData,
+            data: docData.data instanceof Timestamp ? docData.data.toDate() : docData.data
+        };
+
+        const parsed = abateSchema.safeParse(dataToParse);
+        if (parsed.success) {
+            abates.push(parsed.data);
+        } else {
+            console.error("Documento de abate inválido:", doc.id, parsed.error.format());
+        }
     });
-    callback(abates);
+
+    let filteredData = abates.filter(abate => abate.status !== 'inativo');
+
+    if (dateRange?.from) {
+        const toDate = dateRange.to || dateRange.from;
+        const fromTimestamp = new Date(dateRange.from.setHours(0, 0, 0, 0)).getTime();
+        const toTimestamp = new Date(toDate.setHours(23, 59, 59, 999)).getTime();
+        filteredData = filteredData.filter(abate => {
+            const abateTime = abate.data.getTime();
+            return abateTime >= fromTimestamp && abateTime <= toTimestamp;
+        });
+    }
+
+    callback(filteredData.sort((a, b) => b.data.getTime() - a.data.getTime()));
+  }, (error) => {
+    console.error("Erro no listener de Abates: ", error);
   });
 
   return unsubscribe;
 };
 
-// Atualiza um registro de abate existente
-export const updateAbate = async (id: string, abate: Partial<Omit<Abate, 'id' | 'createdAt'>>) => {
-  const abateDoc = doc(db, "abates", id);
-  await updateDoc(abateDoc, abate);
+export const updateAbate = async (id: string, formValues: Partial<AbateFormValues>) => {
+    const dataToUpdate: { [key:string]: any} = { ...formValues };
+    if (formValues.data) {
+        dataToUpdate.data = Timestamp.fromDate(formValues.data);
+    }
+    const abateDoc = doc(db, "abates", id);
+    await updateDoc(abateDoc, dataToUpdate);
 };
 
-// Deleta um registro de abate
-export const deleteAbate = async (id:string) => {
+export const setAbateStatus = async (id:string, status: 'ativo' | 'inativo') => {
     const abateDoc = doc(db, "abates", id);
-    await deleteDoc(abateDoc);
+    await updateDoc(abateDoc, { status });
 }
