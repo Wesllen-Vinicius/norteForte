@@ -1,58 +1,37 @@
 "use client";
+
 import { useState, useEffect, useCallback } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { IconPencil, IconTrash, IconLock } from "@tabler/icons-react";
-import {
-  fetchBancos,
-  Banco,
-} from "@/lib/services/bancos.service";
+import { fetchBancos, Banco } from "@/lib/services/bancos.service";
 import { CrudLayout } from "@/components/crud-layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "@/components/ui/form";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { contaBancariaSchema, ContaBancaria } from "@/lib/schemas";
-import {
-  addContaBancaria,
-  updateContaBancaria,
-  setContaBancariaStatus,
-} from "@/lib/services/contasBancarias.services";
+import { addContaBancaria, updateContaBancaria, setContaBancariaStatus } from "@/lib/services/contasBancarias.services";
 import { GenericTable } from "@/components/generic-table";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { z } from "zod";
-
+import z from "zod";
 import { Combobox } from "@/components/ui/combobox";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-} from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectItem } from "@/components/ui/select";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { DetailsSubRow } from "@/components/details-sub-row";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 type FormValues = z.infer<typeof contaBancariaSchema>;
 
 export default function ContasBancariasPage() {
   const { contasBancarias } = useDataStore();
-  // Agora pegamos o isLoading diretamente do authStore
   const { user, role, isLoading: isAuthLoading } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [bancosList, setBancosList] = useState<Banco[]>([]);
+  const isReadOnly = role !== 'ADMINISTRADOR';
 
   const form = useForm<FormValues>({
     resolver: zodResolver(contaBancariaSchema),
@@ -80,30 +59,17 @@ export default function ContasBancariasPage() {
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     if (!user) return toast.error("Usuário não autenticado.");
 
-    const payload = {
-      ...values,
-      saldoInicial: values.saldoInicial || 0,
-    };
+    const payload = { ...values, saldoInicial: values.saldoInicial || 0 };
 
     try {
       if (isEditing && values.id) {
         await updateContaBancaria(values.id, payload);
         toast.success("Conta atualizada!");
       } else {
-        await addContaBancaria(payload, {
-          uid: user.uid,
-          nome: user.displayName || "N/A",
-        });
+        await addContaBancaria(payload, { uid: user.uid, nome: user.displayName || "N/A" });
         toast.success("Conta adicionada!");
       }
-      form.reset({
-        nomeConta: "",
-        banco: "",
-        agencia: "",
-        conta: "",
-        tipo: "Conta Corrente",
-        saldoInicial: 0,
-      });
+      form.reset();
       setIsEditing(false);
     } catch {
       toast.error("Erro ao salvar conta.");
@@ -111,6 +77,7 @@ export default function ContasBancariasPage() {
   };
 
   const handleEdit = (data: ContaBancaria) => {
+    if(isReadOnly) return;
     form.reset(data);
     setIsEditing(true);
     if(data.banco) form.setValue("banco", data.banco);
@@ -141,26 +108,33 @@ export default function ContasBancariasPage() {
     { header: "Banco", accessorKey: "banco" },
     { header: "Agência", accessorKey: "agencia" },
     { header: "Conta", accessorKey: "conta" },
-    {
-      header: "Saldo Atual",
-      accessorKey: "saldoAtual",
-      cell: ({ row }) => `R$ ${(row.original.saldoAtual ?? 0).toFixed(2)}`,
-    },
+    { header: "Saldo Atual", accessorKey: "saldoAtual", cell: ({ row }) => `R$ ${(row.original.saldoAtual ?? 0).toFixed(2)}` },
     {
       id: "actions",
-      cell: ({ row }) => {
-        const isEditable = role === 'ADMINISTRADOR';
-        return (
-            <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={!isEditable}>
+      cell: ({ row }) => (
+        <div className="flex gap-2 justify-end">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={isReadOnly}>
                     <IconPencil className="h-4 w-4"/>
                 </Button>
-                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id)} disabled={!isEditable}>
-                    <IconTrash className="h-4 w-4" />
-                </Button>
-            </div>
-        )
-      },
+              </TooltipTrigger>
+              <TooltipContent><p>Editar Conta</p></TooltipContent>
+            </Tooltip>
+            {!isReadOnly && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(row.original.id)}>
+                      <IconTrash className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Inativar Conta</p></TooltipContent>
+              </Tooltip>
+            )}
+          </TooltipProvider>
+        </div>
+      ),
     },
   ];
 
@@ -175,9 +149,9 @@ export default function ContasBancariasPage() {
         </div>
       </div>
     ) : (
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} id="contabancaria-form">
-          <fieldset disabled={role !== 'ADMINISTRADOR'} className="space-y-4 disabled:opacity-70 disabled:pointer-events-none">
+      <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} id="contabancaria-form" className="space-y-4">
               <FormField name="nomeConta" control={form.control} render={({ field }) => (<FormItem><FormLabel>Nome da Conta</FormLabel><FormControl><Input placeholder="Ex: Conta Principal, Caixa da Loja" {...field} /></FormControl><FormMessage /></FormItem>)}/>
               <FormField name="tipo" control={form.control} render={({ field }) => (
                   <FormItem>
@@ -210,22 +184,20 @@ export default function ContasBancariasPage() {
                       <FormMessage />
                   </FormItem>
               )} />
-          </fieldset>
-
-          <div className="flex justify-end gap-2 pt-4">
-              {isEditing && (<Button type="button" variant="outline" onClick={() => { form.reset(); setIsEditing(false);}}>Cancelar</Button>)}
-              <Button type="submit" form="contabancaria-form" disabled={role !== 'ADMINISTRADOR'}>{isEditing ? "Salvar Alterações" : "Adicionar Conta"}</Button>
-          </div>
-
-          {role !== 'ADMINISTRADOR' && !isAuthLoading && (
-               <Alert variant="destructive" className="mt-6">
-                  <IconLock className="h-4 w-4" />
-                  <AlertTitle>Acesso Restrito</AlertTitle>
-                  <AlertDescription>Apenas administradores podem gerenciar contas bancárias.</AlertDescription>
-              </Alert>
-          )}
-        </form>
-      </Form>
+              <div className="flex justify-end gap-2 pt-4">
+                  {isEditing && (<Button type="button" variant="outline" onClick={() => { form.reset(); setIsEditing(false);}}>Cancelar</Button>)}
+                  <Button type="submit" form="contabancaria-form">{isEditing ? "Salvar Alterações" : "Adicionar Conta"}</Button>
+              </div>
+          </form>
+        </Form>
+        {isReadOnly && (
+            <Alert variant="destructive" className="mt-6">
+                <IconLock className="h-4 w-4" />
+                <AlertTitle>Acesso Restrito</AlertTitle>
+                <AlertDescription>Apenas administradores podem gerenciar contas bancárias.</AlertDescription>
+            </Alert>
+        )}
+      </fieldset>
     )
   );
 
