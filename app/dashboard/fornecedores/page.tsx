@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const formSchema = fornecedorSchema.superRefine((data, ctx) => {
     if (data.cnpj && !isValidCnpj(data.cnpj)) {
@@ -53,15 +54,14 @@ export default function FornecedoresPage() {
     const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("ativo");
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
-
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-
     const [isContasModalOpen, setIsContasModalOpen] = useState(false);
     const [selectedFornecedor, setSelectedFornecedor] = useState<Fornecedor | null>(null);
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
     useEffect(() => {
-        if (role !== 'ADMINISTRADOR') return;
+        if (!role) return;
         const unsubscribe: Unsubscribe = subscribeToFornecedoresByStatus(statusFiltro, setFornecedores);
         return () => unsubscribe();
     }, [statusFiltro, role]);
@@ -105,7 +105,12 @@ export default function FornecedoresPage() {
     };
 
     const handleOpenContasModal = useCallback((fornecedor: Fornecedor) => { setSelectedFornecedor(fornecedor); setIsContasModalOpen(true); }, []);
-    const handleEdit = (fornecedor: Fornecedor) => { form.reset(fornecedor); setIsEditing(true); };
+
+    const handleEdit = (fornecedor: Fornecedor) => {
+        if(isReadOnly) return;
+        form.reset(fornecedor);
+        setIsEditing(true);
+    };
 
     const handleStatusActionClick = (id: string) => {
         setSelectedId(id);
@@ -154,19 +159,47 @@ export default function FornecedoresPage() {
         { accessorKey: "razaoSocial", header: "Razão Social" }, { accessorKey: "cnpj", header: "CNPJ" }, { accessorKey: "contato", header: "Contato" },
         { id: "actions", cell: ({ row }) => {
             const item = row.original;
-            return (<div className="text-right flex justify-end items-center">
-                {statusFiltro === 'ativo' && <Button variant="outline" size="sm" onClick={() => handleOpenContasModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>}
-                <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}><IconPencil className="h-4 w-4" /></Button>
-                {statusFiltro === 'ativo' ? (
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick(item.id!)}>
-                        <IconArchive className="h-4 w-4" />
-                    </Button>
-                ) : (
-                    <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick(item.id!)}>
-                        <IconRefresh className="h-4 w-4" />
-                    </Button>
-                )}
-            </div>);
+            return (
+                <div className="text-right flex justify-end items-center">
+                    <TooltipProvider>
+                        {statusFiltro === 'ativo' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="outline" size="sm" onClick={() => handleOpenContasModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Ver Contas a Pagar Pendentes</p></TooltipContent>
+                            </Tooltip>
+                        )}
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={isReadOnly}><IconPencil className="h-4 w-4" /></Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Editar Fornecedor</p></TooltipContent>
+                        </Tooltip>
+                        {!isReadOnly && (
+                            statusFiltro === 'ativo' ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick(item.id!)}>
+                                            <IconArchive className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Inativar Fornecedor</p></TooltipContent>
+                                </Tooltip>
+                            ) : (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick(item.id!)}>
+                                            <IconRefresh className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Reativar Fornecedor</p></TooltipContent>
+                                </Tooltip>
+                            )
+                        )}
+                    </TooltipProvider>
+                </div>
+            );
         }},
     ];
 
@@ -195,7 +228,7 @@ export default function FornecedoresPage() {
     };
 
     const formContent = (
-        <fieldset disabled={role !== 'ADMINISTRADOR'} className="disabled:opacity-70 disabled:pointer-events-none">
+        <fieldset disabled={isReadOnly} className="disabled:opacity-70">
             <GenericForm schema={formSchema} onSubmit={onSubmit} formId="fornecedor-form" form={form}>
                  <div className="space-y-4">
                     <FormField name="razaoSocial" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Razão Social</FormLabel><FormControl><Input placeholder="Nome da empresa" {...field} /></FormControl><FormMessage /></FormItem> )} />
@@ -236,6 +269,15 @@ export default function FornecedoresPage() {
                     <Button type="submit" form="fornecedor-form">{isEditing ? "Salvar Alterações" : "Cadastrar Fornecedor"}</Button>
                 </div>
             </GenericForm>
+            {isReadOnly && (
+                <Alert variant="destructive" className="mt-6">
+                    <IconLock className="h-4 w-4" />
+                    <AlertTitle>Acesso Restrito</AlertTitle>
+                    <AlertDescription>
+                        Apenas administradores podem gerenciar fornecedores.
+                    </AlertDescription>
+                </Alert>
+            )}
         </fieldset>
     );
 
@@ -247,20 +289,6 @@ export default function FornecedoresPage() {
             </ToggleGroup>
         </div>
     );
-
-    if (role !== 'ADMINISTRADOR') {
-        return (
-             <div className="container mx-auto py-6 px-4 md:px-6">
-                <Alert variant="destructive">
-                    <IconLock className="h-4 w-4" />
-                    <AlertTitle>Acesso Restrito</AlertTitle>
-                    <AlertDescription>
-                        Você não tem permissão para gerenciar fornecedores.
-                    </AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
 
     return (
         <>

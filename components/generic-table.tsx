@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "./ui/input";
-
+import { TruncatedCell } from "./ui/truncated-cell";
 
 interface GenericTableProps<TData extends object> {
     data: TData[];
@@ -85,13 +85,13 @@ export function GenericTable<TData extends object>({
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    getRowCanExpand: () => !!renderSubComponent, // A linha pode expandir se o sub-componente existir
+    getRowCanExpand: () => !!renderSubComponent,
   });
 
   return (
     <div className="space-y-4">
       <div className="flex items-center">
-        {filterPlaceholder && filterColumnId && (
+        {filterPlaceholder && (
             <Input
                 placeholder={filterPlaceholder}
                 value={globalFilter}
@@ -126,10 +126,19 @@ export function GenericTable<TData extends object>({
                 <React.Fragment key={row.id}>
                     <TableRow data-state={row.getIsSelected() && "selected"}>
                         {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                            {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
+                        <TableCell key={cell.id} className="max-w-[250px]">
+                            {cell.column.id !== 'actions' && cell.column.id !== 'expander' ? (
+                                <TruncatedCell>
+                                    {flexRender(
+                                        cell.column.columnDef.cell,
+                                        cell.getContext()
+                                    )}
+                                </TruncatedCell>
+                            ) : (
+                                flexRender(
+                                    cell.column.columnDef.cell,
+                                    cell.getContext()
+                                )
                             )}
                         </TableCell>
                         ))}

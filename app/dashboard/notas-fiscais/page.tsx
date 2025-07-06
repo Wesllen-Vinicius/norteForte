@@ -2,23 +2,29 @@
 
 import { useState, useMemo, ReactElement } from "react";
 import { ColumnDef, Row } from "@tanstack/react-table";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { toast } from "sonner";
-import { IconFileDownload, IconX, IconRefresh, IconFileX } from "@tabler/icons-react";
+import { DateRange } from "react-day-picker";
+import { IconFileDownload, IconX, IconRefresh, IconFileX, IconAlertTriangle, IconFileCheck, IconClock, IconFileOff } from "@tabler/icons-react";
 
 import { useDataStore } from "@/store/data.store";
-import { Venda } from "@/lib/schemas";
+import { Venda, CompanyInfo, Cliente, Produto, Unidade } from "@/lib/schemas";
 import { GenericTable } from "@/components/generic-table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DetailsSubRow } from "@/components/details-sub-row";
-import { consultarNFe, cancelarNFe } from "@/lib/services/nfe.services";
+import { consultarNFe, cancelarNFe, emitirNFe } from "@/lib/services/nfe.services";
 import { updateVenda } from "@/lib/services/vendas.services";
+import { getCompanyInfo } from "@/lib/services/settings.services";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { NfePreviewModal } from "@/components/nfe-preview-modal";
 import Link from "next/link";
+import React from "react";
 
 type VendaComNFe = Venda & { clienteNome?: string };
 
@@ -26,18 +32,43 @@ const getStatusInfo = (status: string | undefined): { text: string; variant: "de
     switch (status) {
         case 'autorizado': return { text: 'Autorizada', variant: 'success' };
         case 'processando_autorizacao': return { text: 'Processando', variant: 'warning' };
-        case 'cancelado': return { text: 'Cancelada', variant: 'outline' };
+        case 'cancelado': return { text: 'Cancelada', variant: 'secondary' };
         case 'erro_autorizacao': return { text: 'Erro', variant: 'destructive' };
         case 'erro_cancelamento': return { text: 'Erro ao Cancelar', variant: 'destructive' };
-        default: return { text: status || 'Não Emitida', variant: 'secondary' };
+        default: return { text: status || 'Não Emitida', variant: 'outline' };
     }
 };
 
+interface StatusCardProps {
+    title: string;
+    count: number;
+    icon: React.ElementType;
+    variant?: 'success' | 'warning' | 'destructive' | 'default';
+    onClick: () => void;
+}
+
+const StatusCard = ({ title, count, icon: Icon, variant, onClick }: StatusCardProps) => (
+    <Card onClick={onClick} className={`cursor-pointer transition-all hover:border-primary/50 ${variant === 'destructive' ? 'border-destructive/50' : ''} ${variant === 'warning' ? 'border-amber-500/50' : ''}`}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{title}</CardTitle>
+            <Icon className={`h-4 w-4 text-muted-foreground ${variant === 'destructive' ? 'text-destructive' : ''} ${variant === 'warning' ? 'text-amber-500' : ''}`} />
+        </CardHeader>
+        <CardContent>
+            <div className="text-2xl font-bold">{count}</div>
+        </CardContent>
+    </Card>
+);
+
 export default function NotasFiscaisPage() {
-    const { vendas, clientes } = useDataStore();
+    const { vendas, clientes, produtos, unidades } = useDataStore();
     const [isCanceling, setIsCanceling] = useState(false);
     const [cancelJustificativa, setCancelJustificativa] = useState("");
     const [selectedVenda, setSelectedVenda] = useState<VendaComNFe | null>(null);
+    const [statusFilter, setStatusFilter] = useState<string>("todos");
+    const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 30), to: new Date() });
+    const [isNfeModalOpen, setIsNfeModalOpen] = useState(false);
+    const [nfePreviewData, setNfePreviewData] = useState<any | null>(null);
+    const [isEmittingNfe, setIsEmittingNfe] = useState(false);
 
     const vendasComNFe = useMemo(() => {
         return vendas
@@ -48,17 +79,61 @@ export default function NotasFiscaisPage() {
             }));
     }, [vendas, clientes]);
 
+    const filteredVendas = useMemo(() => {
+        return vendasComNFe.filter(v => {
+            const statusMatch = statusFilter === 'todos' || v.nfe?.status === statusFilter;
+            const dateMatch = dateRange?.from && dateRange.to ? (new Date(v.data) >= dateRange.from && new Date(v.data) <= dateRange.to) : true;
+            return statusMatch && dateMatch;
+        });
+    }, [vendasComNFe, statusFilter, dateRange]);
+
+    const statusCounts = useMemo(() => ({
+        processando_autorizacao: vendasComNFe.filter(v => v.nfe?.status === 'processando_autorizacao').length,
+        autorizado: vendasComNFe.filter(v => v.nfe?.status === 'autorizado').length,
+        erro_autorizacao: vendasComNFe.filter(v => v.nfe?.status === 'erro_autorizacao').length,
+        cancelado: vendasComNFe.filter(v => v.nfe?.status === 'cancelado').length,
+    }), [vendasComNFe]);
+
+    const handlePrepareNFe = async (venda: VendaComNFe) => {
+        const toastId = toast.loading("Preparando dados da NF-e...");
+        try {
+            const cliente = clientes.find(c => c.id === venda.clienteId);
+            const empresaInfo = await getCompanyInfo();
+            if (!cliente || !empresaInfo) { throw new Error("Dados do cliente ou da empresa não encontrados."); }
+            setNfePreviewData({ venda, empresa: empresaInfo, cliente, todosProdutos: produtos, todasUnidades: unidades });
+            setIsNfeModalOpen(true);
+            toast.dismiss(toastId);
+        } catch (error: any) {
+            toast.error("Erro ao preparar NF-e", { id: toastId, description: error.message });
+        }
+    };
+
+    const handleConfirmAndEmitNFe = async (formData: { venda: Venda, empresa: CompanyInfo, cliente: Cliente, todosProdutos: Produto[], todasUnidades: Unidade[] }) => {
+        setIsEmittingNfe(true);
+        const toastId = toast.loading("Enviando dados para a Sefaz...");
+        try {
+            const resultado = await emitirNFe(formData.venda, formData.empresa, formData.cliente, formData.todosProdutos, formData.todasUnidades);
+            const nfeUpdateData = { id: resultado.ref, status: resultado.status, url_danfe: resultado.caminho_danfe, url_xml: resultado.caminho_xml_nota_fiscal };
+            await updateVenda(formData.venda.id!, { nfe: nfeUpdateData });
+
+            if (resultado.status === 'autorizado') { toast.success("NF-e autorizada com sucesso!", { id: toastId });
+            } else if (resultado.status === 'processando_autorizacao') { toast.info("NF-e em processamento. Consulte o status em breve.", { id: toastId });
+            } else { const errorMessage = resultado.erros ? resultado.erros[0].mensagem : (resultado.mensagem_sefaz || 'Erro desconhecido'); toast.error(`Falha na emissão: ${errorMessage}`, { id: toastId, duration: 10000 }); }
+
+            setIsNfeModalOpen(false);
+        } catch (error: any) {
+            toast.error("Erro ao emitir NF-e", { id: toastId, description: error.message });
+        } finally {
+            setIsEmittingNfe(false);
+        }
+    };
+
     const handleConsultarStatus = async (venda: VendaComNFe) => {
         if (!venda.nfe?.id) return;
         const toastId = toast.loading("Consultando status da NF-e...");
         try {
             const resultado = await consultarNFe(venda.nfe.id);
-            const nfeUpdateData = {
-                id: resultado.ref,
-                status: resultado.status,
-                url_danfe: resultado.caminho_danfe,
-                url_xml: resultado.caminho_xml_nota_fiscal,
-            };
+            const nfeUpdateData = { id: resultado.ref, status: resultado.status, url_danfe: resultado.caminho_danfe, url_xml: resultado.caminho_xml_nota_fiscal };
             await updateVenda(venda.id!, { nfe: nfeUpdateData });
             toast.success(`Status atualizado: ${resultado.status}`, { id: toastId });
         } catch (error: any) {
@@ -126,66 +201,58 @@ export default function NotasFiscaisPage() {
             id: "actions",
             cell: ({ row }) => {
                 const venda = row.original;
-                const ref = venda.nfe?.id;
                 const status = venda.nfe?.status;
-
-                if (!ref) return null;
-
                 return (
                     <div className="flex justify-end gap-2">
-                        {status === 'autorizado' && (
+                         {status === 'erro_autorizacao' && <Button variant="destructive" size="sm" onClick={() => handlePrepareNFe(venda)}><IconRefresh className="h-4 w-4 mr-1"/> Re-emitir</Button> }
+                         {status === 'processando_autorizacao' && <Button variant="secondary" size="sm" onClick={() => handleConsultarStatus(venda)}><IconRefresh className="h-4 w-4 mr-1"/> Consultar</Button> }
+                         {status === 'autorizado' && (
                             <>
-                                <Button variant="outline" size="sm" asChild>
-                                    <a href={venda.nfe?.url_danfe} target="_blank" rel="noopener noreferrer"><IconFileDownload className="h-4 w-4 mr-1" /> PDF</a>
-                                </Button>
-                                <Button variant="outline" size="sm" asChild>
-                                    <a href={venda.nfe?.url_xml} target="_blank" rel="noopener noreferrer"><IconFileX className="h-4 w-4 mr-1" /> XML</a>
-                                </Button>
-                                <Button variant="destructive" size="sm" onClick={() => handleOpenCancelDialog(venda)}>
-                                    <IconX className="h-4 w-4 mr-1"/> Cancelar
-                                </Button>
+                                <Button variant="outline" size="sm" asChild><a href={venda.nfe?.url_danfe} target="_blank" rel="noopener noreferrer"><IconFileDownload className="h-4 w-4 mr-1" /> DANFE</a></Button>
+                                <Button variant="destructive" size="sm" onClick={() => handleOpenCancelDialog(venda)}><IconX className="h-4 w-4 mr-1"/> Cancelar</Button>
                             </>
                         )}
-                         {(status === 'processando_autorizacao' || status === 'erro_autorizacao') && (
-                            <Button variant="secondary" size="sm" onClick={() => handleConsultarStatus(venda)}>
-                                <IconRefresh className="h-4 w-4 mr-1"/> Consultar
-                            </Button>
-                        )}
-                         {status === 'cancelado' && (
-                             <Badge variant="outline">NF-e Cancelada</Badge>
-                         )}
                     </div>
                 );
             }
         }
     ];
 
+    const tableControlsComponent = (
+        <div className="flex items-center gap-2">
+            <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filtrar por status..." />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="todos">Todos os Status</SelectItem>
+                    <SelectItem value="autorizado">Autorizada</SelectItem>
+                    <SelectItem value="processando_autorizacao">Processando</SelectItem>
+                    <SelectItem value="erro_autorizacao">Com Erro</SelectItem>
+                    <SelectItem value="cancelado">Cancelada</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+    );
+
     return (
-        <div className="container mx-auto py-8 px-4 md:px-6">
+        <div className="container mx-auto py-8 px-4 md:px-6 space-y-6">
+            <NfePreviewModal isOpen={isNfeModalOpen} onOpenChange={setIsNfeModalOpen} previewData={nfePreviewData} onSubmit={handleConfirmAndEmitNFe} isLoading={isEmittingNfe} />
             <Dialog open={isCanceling} onOpenChange={setIsCanceling}>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Cancelar NF-e</DialogTitle>
-                        <DialogDescription>
-                            Para cancelar a nota fiscal, por favor, forneça uma justificativa com no mínimo 15 caracteres.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Label htmlFor="justificativa">Justificativa</Label>
-                        <Textarea
-                            id="justificativa"
-                            value={cancelJustificativa}
-                            onChange={(e) => setCancelJustificativa(e.target.value)}
-                            placeholder="Ex: Erro na digitação dos itens da nota..."
-                            rows={4}
-                        />
-                    </div>
-                    <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="outline">Fechar</Button></DialogClose>
-                        <Button onClick={handleCancelarNFe}>Confirmar Cancelamento</Button>
-                    </DialogFooter>
+                    <DialogHeader><DialogTitle>Cancelar NF-e</DialogTitle><DialogDescription>Forneça uma justificativa com no mínimo 15 caracteres.</DialogDescription></DialogHeader>
+                    <div className="py-4"><Label htmlFor="justificativa">Justificativa</Label><Textarea id="justificativa" value={cancelJustificativa} onChange={(e) => setCancelJustificativa(e.target.value)} placeholder="Ex: Erro na digitação dos itens da nota..." rows={4}/></div>
+                    <DialogFooter><DialogClose asChild><Button type="button" variant="outline">Fechar</Button></DialogClose><Button onClick={handleCancelarNFe}>Confirmar Cancelamento</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <StatusCard title="NF-e Autorizadas" count={statusCounts.autorizado} icon={IconFileCheck} variant="success" onClick={() => setStatusFilter('autorizado')} />
+                <StatusCard title="Em Processamento" count={statusCounts.processando_autorizacao} icon={IconClock} variant="warning" onClick={() => setStatusFilter('processando_autorizacao')} />
+                <StatusCard title="Com Erro na Emissão" count={statusCounts.erro_autorizacao} icon={IconAlertTriangle} variant="destructive" onClick={() => setStatusFilter('erro_autorizacao')} />
+                <StatusCard title="Canceladas" count={statusCounts.cancelado} icon={IconFileOff} variant="default" onClick={() => setStatusFilter('cancelado')} />
+            </div>
 
             <Card>
                 <CardHeader>
@@ -195,10 +262,11 @@ export default function NotasFiscaisPage() {
                 <CardContent>
                     <GenericTable
                         columns={columns}
-                        data={vendasComNFe}
+                        data={filteredVendas}
                         filterPlaceholder="Filtrar por cliente..."
                         filterColumnId="clienteNome"
                         renderSubComponent={renderSubComponent}
+                        tableControlsComponent={tableControlsComponent}
                     />
                 </CardContent>
             </Card>

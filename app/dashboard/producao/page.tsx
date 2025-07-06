@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useForm, useFieldArray, useWatch, Control, UseFormSetValue, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { IconPlus, IconTrash, IconPencil, IconAlertTriangle, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconPencil, IconAlertTriangle, IconChevronDown, IconChevronUp, IconLock } from "@tabler/icons-react";
 import { format } from 'date-fns';
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { DateRange } from "react-day-picker";
-import { Timestamp } from "firebase/firestore";
+import { Timestamp, Unsubscribe } from "firebase/firestore";
 
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericTable } from "@/components/generic-table";
@@ -17,17 +17,18 @@ import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { DatePicker } from "@/components/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
 import { Producao, producaoFormSchema, ProducaoFormValues } from "@/lib/schemas";
 import { registrarProducao, updateProducao, setProducaoStatus } from "@/lib/services/producao.services";
+import { DatePicker } from "@/components/date-picker";
 
 
 type ProducaoComDetalhes = Producao & { responsavelNome?: string; registradorNome?: string; registradorRole?: string };
@@ -120,6 +121,7 @@ function ProdutoProducaoItem({ index, control, setValue, remove, animaisValidos 
 export default function ProducaoPage() {
     const { producoes, funcionarios, abates, users, produtos, compras } = useDataStore();
     const { user, role } = useAuthStore();
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -178,6 +180,7 @@ export default function ProducaoPage() {
     const resetForm = () => { reset(defaultFormValues); setIsEditing(false); setEditingId(null); remove(); };
 
     const handleEdit = (producao: ProducaoComDetalhes) => {
+        if(isReadOnly) return;
         setIsEditing(true);
         setEditingId(producao.id!);
         form.reset({
@@ -266,12 +269,25 @@ export default function ProducaoPage() {
             const item = row.original;
             const createdAt = item.createdAt as Timestamp | undefined;
             const podeEditar = role === 'ADMINISTRADOR' || (item.registradoPor.uid === user?.uid && createdAt && (new Date(Date.now() - 2 * 60 * 60 * 1000) < (createdAt as Timestamp).toDate()));
-            const podeExcluir = role === 'ADMINISTRADOR';
 
             return (
                 <div className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
-                    {podeExcluir && <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>}
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Editar Produção</p></TooltipContent>
+                        </Tooltip>
+                        {!isReadOnly && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Inativar Produção</p></TooltipContent>
+                            </Tooltip>
+                        )}
+                    </TooltipProvider>
                 </div>
             )
         }},
@@ -302,33 +318,42 @@ export default function ProducaoPage() {
                 </AlertDescription>
             </Alert>
         ) : (
-            <Form {...form}>
-                <form onSubmit={handleSubmit(onSubmit)} id="producao-form" className="space-y-4">
-                    <FormField name="data" control={control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data</FormLabel><DatePicker date={field.value} onDateChange={field.onChange} /><FormMessage /></FormItem>)} />
-                    <FormField name="responsavelId" control={control} render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Combobox options={funcionarioOptions} {...field} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." /><FormMessage /></FormItem>)} />
-                    <FormField name="abateId" control={control} render={({ field }) => (<FormItem><FormLabel>Vincular Abate</FormLabel><Combobox options={abateOptions} {...field} placeholder="Selecione o abate de origem" searchPlaceholder="Buscar abate..."/><FormMessage /></FormItem>)} />
-                    <FormField name="lote" control={control} render={({ field }) => (<FormItem><FormLabel>Lote</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
-                    <FormField name="descricao" control={control} render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
-                    <Separator className="my-6" />
-                    <div className="space-y-4">
-                        <FormLabel>Produtos Gerados</FormLabel>
-                        {fields.map((field, index) => (
-                            <ProdutoProducaoItem
-                                key={field.id}
-                                index={index}
-                                control={control}
-                                setValue={setValue}
-                                remove={remove}
-                                animaisValidos={animaisValidosParaProducao}
-                            />
-                        ))}
-                        <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", produtoNome: "", quantidade: 0, perda: 0 })}>
-                            <IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto
-                        </Button>
-                    </div>
-                    <div className="flex justify-end pt-6"><Button type="submit" form="producao-form">{isEditing ? "Salvar Alterações" : "Registrar Produção"}</Button></div>
-                </form>
-            </Form>
+            <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+                <Form {...form}>
+                    <form onSubmit={handleSubmit(onSubmit)} id="producao-form" className="space-y-4">
+                        <FormField name="data" control={control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data</FormLabel><DatePicker date={field.value} onDateChange={field.onChange} /><FormMessage /></FormItem>)} />
+                        <FormField name="responsavelId" control={control} render={({ field }) => (<FormItem><FormLabel>Responsável</FormLabel><Combobox options={funcionarioOptions} {...field} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." /><FormMessage /></FormItem>)} />
+                        <FormField name="abateId" control={control} render={({ field }) => (<FormItem><FormLabel>Vincular Abate</FormLabel><Combobox options={abateOptions} {...field} placeholder="Selecione o abate de origem" searchPlaceholder="Buscar abate..."/><FormMessage /></FormItem>)} />
+                        <FormField name="lote" control={control} render={({ field }) => (<FormItem><FormLabel>Lote</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
+                        <FormField name="descricao" control={control} render={({ field }) => (<FormItem><FormLabel>Descrição</FormLabel><Input {...field} /><FormMessage /></FormItem>)} />
+                        <Separator className="my-6" />
+                        <div className="space-y-4">
+                            <FormLabel>Produtos Gerados</FormLabel>
+                            {fields.map((field, index) => (
+                                <ProdutoProducaoItem
+                                    key={field.id}
+                                    index={index}
+                                    control={control}
+                                    setValue={setValue}
+                                    remove={remove}
+                                    animaisValidos={animaisValidosParaProducao}
+                                />
+                            ))}
+                            <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", produtoNome: "", quantidade: 0, perda: 0 })}>
+                                <IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto
+                            </Button>
+                        </div>
+                        <div className="flex justify-end pt-6"><Button type="submit" form="producao-form">{isEditing ? "Salvar Alterações" : "Registrar Produção"}</Button></div>
+                    </form>
+                </Form>
+                {isReadOnly && (
+                    <Alert variant="destructive" className="mt-6">
+                        <IconLock className="h-4 w-4" />
+                        <AlertTitle>Acesso Restrito</AlertTitle>
+                        <AlertDescription>Apenas administradores podem gerenciar a produção.</AlertDescription>
+                    </Alert>
+                )}
+            </fieldset>
         )
     );
 

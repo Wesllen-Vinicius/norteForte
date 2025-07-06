@@ -15,7 +15,6 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { DatePicker } from "@/components/date-picker";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Combobox } from "@/components/ui/combobox";
 import { GenericTable } from "@/components/generic-table";
@@ -26,6 +25,7 @@ import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 import { Compra, compraSchema } from "@/lib/schemas";
 import { registrarCompra } from "@/lib/services/compras.services";
+import { DatePicker } from "@/components/date-picker";
 
 type CompraFormValues = z.infer<typeof compraSchema>;
 type CompraComDetalhes = Compra & { fornecedorNome: string };
@@ -46,6 +46,7 @@ const defaultFormValues: CompraFormValues = {
 export default function ComprasPage() {
     const { produtos, fornecedores, contasBancarias, compras } = useDataStore();
     const { role } = useAuthStore();
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
     const form = useForm<CompraFormValues>({
         resolver: zodResolver(compraSchema),
@@ -160,8 +161,8 @@ export default function ComprasPage() {
                 </AlertDescription>
             </Alert>
         ) : (
-            <Form {...form}>
-                <fieldset disabled={role !== 'ADMINISTRADOR'} className="disabled:opacity-70 disabled:pointer-events-none">
+            <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+                <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} id="compra-form" className="space-y-6">
                         <div className="space-y-4">
                             <FormField name="fornecedorId" control={form.control} render={({ field }) => (
@@ -248,15 +249,15 @@ export default function ComprasPage() {
                             <Button type="submit" form="compra-form" size="lg">Registrar Compra</Button>
                         </div>
                     </form>
-                </fieldset>
-                {role !== 'ADMINISTRADOR' && (
+                </Form>
+                 {isReadOnly && (
                     <Alert variant="destructive" className="mt-6">
                         <IconLock className="h-4 w-4" />
                         <AlertTitle>Acesso Restrito</AlertTitle>
                         <AlertDescription>Apenas administradores podem registrar compras.</AlertDescription>
                     </Alert>
                 )}
-            </Form>
+            </fieldset>
         )
     );
 

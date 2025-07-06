@@ -5,7 +5,7 @@ import { useForm, DefaultValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
-import { IconPencil, IconTrash, IconSearch, IconLoader, IconFileDollar, IconRefresh, IconLock } from "@tabler/icons-react";
+import { IconPencil, IconSearch, IconLoader, IconFileDollar, IconRefresh, IconLock, IconArchive } from "@tabler/icons-react";
 import Link from "next/link";
 import { Unsubscribe } from "firebase/firestore";
 
@@ -31,6 +31,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DetailsSubRow } from "@/components/details-sub-row";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 const formSchema = clienteSchema.superRefine((data, ctx) => {
     if (data.tipoPessoa === 'fisica' && data.documento && !isValidCpf(data.documento)) {
@@ -60,14 +62,18 @@ export default function ClientesPage() {
     const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>("ativo");
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
     const { role } = useAuthStore();
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
     useEffect(() => {
+        if (!role) return;
         const unsubscribe: Unsubscribe = subscribeToClientesByStatus(statusFiltro, setClientes);
         return () => unsubscribe();
-    }, [statusFiltro]);
+    }, [statusFiltro, role]);
 
     const form = useForm<ClienteFormValues>({
         resolver: zodResolver(formSchema),
@@ -112,16 +118,31 @@ export default function ClientesPage() {
     };
 
     const handleOpenModal = useCallback((cliente: Cliente) => { setSelectedClient(cliente); setIsModalOpen(true); }, []);
-    const handleEdit = (cliente: Cliente) => { form.reset(cliente); setIsEditing(true); };
 
-    const handleStatusChange = async (id: string, newStatus: 'ativo' | 'inativo') => {
+    const handleEdit = (cliente: Cliente) => {
+        if(isReadOnly) return;
+        form.reset(cliente);
+        setIsEditing(true);
+    };
+
+    const handleStatusActionClick = (id: string) => {
+        setSelectedId(id);
+        setDialogOpen(true);
+    };
+
+    const confirmStatusChange = async () => {
+        if (!selectedId) return;
+        const newStatus: StatusFiltro = statusFiltro === 'ativo' ? 'inativo' : 'ativo';
         const action = newStatus === 'inativo' ? 'inativar' : 'reativar';
-        if (!confirm(`Tem certeza que deseja ${action} este cliente?`)) return;
         try {
-            await setClienteStatus(id, newStatus);
+            await setClienteStatus(selectedId, newStatus);
             toast.success(`Cliente ${action === 'inativar' ? 'inativado' : 'reativado'} com sucesso!`);
         } catch {
             toast.error(`Erro ao ${action} o cliente.`);
+        }
+        finally {
+            setSelectedId(null);
+            setDialogOpen(false);
         }
     };
 
@@ -156,20 +177,41 @@ export default function ClientesPage() {
         { accessorKey: "nome", header: "Nome / Razão Social" }, { accessorKey: "documento", header: "Documento" }, { accessorKey: "telefone", header: "Telefone" },
         { id: "actions", cell: ({ row }) => {
             const item = row.original;
-            const isAdministrador = role === 'ADMINISTRADOR';
             return (
                 <div className="text-right flex justify-end items-center">
-                    {item.status === 'ativo' && (
-                        <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>
-                    )}
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isAdministrador}><IconPencil className="h-4 w-4" /></Button>
-                    {isAdministrador && (
-                        item.status === 'ativo' ? (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusChange(item.id!, 'inativo')}><IconTrash className="h-4 w-4" /></Button>
-                        ) : (
-                            <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusChange(item.id!, 'ativo')}><IconRefresh className="h-4 w-4" /></Button>
-                        )
-                    )}
+                    <TooltipProvider>
+                        {statusFiltro === 'ativo' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} className="mr-2"><IconFileDollar className="h-4 w-4 mr-2"/>Ver Contas</Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Ver Contas a Receber Pendentes</p></TooltipContent>
+                            </Tooltip>
+                        )}
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={isReadOnly}><IconPencil className="h-4 w-4" /></Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Editar Cliente</p></TooltipContent>
+                        </Tooltip>
+                        {!isReadOnly && (
+                            statusFiltro === 'ativo' ? (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick(item.id!)}><IconArchive className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Inativar Cliente</p></TooltipContent>
+                                </Tooltip>
+                            ) : (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick(item.id!)}><IconRefresh className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Reativar Cliente</p></TooltipContent>
+                                </Tooltip>
+                            )
+                        )}
+                    </TooltipProvider>
                 </div>
             );
         }},
@@ -200,6 +242,81 @@ export default function ClientesPage() {
         );
     };
 
+    const formContent = (
+        <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+            <GenericForm schema={formSchema} onSubmit={onSubmit} formId="cliente-form" form={form}>
+                 <div className="space-y-4">
+                    <FormField name="nome" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Nome / Razão Social</FormLabel><FormControl><Input placeholder="Nome completo ou da empresa" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="tipoPessoa" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pessoa Física ou Jurídica" /></SelectTrigger></FormControl><SelectContent><SelectItem value="fisica">Pessoa Física</SelectItem><SelectItem value="juridica">Pessoa Jurídica</SelectItem></SelectContent></Select><FormMessage /></FormItem> )} />
+                        <FormField name="documento" control={form.control} render={({ field }) => ( <FormItem><FormLabel>CPF / CNPJ</FormLabel><div className="flex items-center gap-2">
+                            <FormControl><MaskedInput className="w-full" mask={tipoPessoa === 'fisica' ? '000.000.000-00' : '00.000.000/0000-00'} {...field} /></FormControl>
+                            {showCnpjSearch && (<Button type="button" size="icon" variant="outline" onClick={() => handleFetch('cnpj')} disabled={isFetching}>{isFetching ? <IconLoader className="h-4 w-4 animate-spin" /> : <IconSearch className="h-4 w-4" />}</Button>)}
+                        </div><FormMessage /></FormItem> )} />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="telefone" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Telefone</FormLabel><FormControl><MaskedInput mask="(00) 00000-0000" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                        <FormField name="email" control={form.control} render={({ field }) => ( <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                    </div>
+
+                    <Separator className="my-6" />
+                    <h3 className="text-lg font-medium">Dados Fiscais</h3>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="indicadorInscricaoEstadual" control={form.control} render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Indicador de Inscrição Estadual</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="1">Contribuinte ICMS (com IE)</SelectItem>
+                                        <SelectItem value="2">Contribuinte isento de IE</SelectItem>
+                                        <SelectItem value="9">Não Contribuinte</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormDescription>Essencial para a emissão de NF-e.</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                         <FormField name="inscricaoEstadual" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Inscrição Estadual</FormLabel><FormControl><Input placeholder="Obrigatório se for Contribuinte" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                    </div>
+
+                    <Separator className="my-6" />
+                    <h3 className="text-lg font-medium">Endereço</h3>
+                    <div className="grid md:grid-cols-[1fr_auto] gap-2">
+                        <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="00000-000" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormItem><FormLabel>&nbsp;</FormLabel><div className="flex items-center">
+                            {showCepSearch && <Button type="button" variant="outline" onClick={() => handleFetch('cep')} disabled={isFetching}>{isFetching ? <IconLoader className="h-4 w-4 animate-spin"/> : "Buscar Endereço"}</Button>}
+                        </div></FormItem>
+                    </div>
+                    <div className="grid md:grid-cols-[2fr_1fr] gap-4">
+                        <FormField name="endereco.logradouro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Logradouro</FormLabel><FormControl><Input placeholder="Rua, Av, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField name="endereco.numero" control={form.control} render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input id="endereco.numero" placeholder="123" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <FormField name="endereco.complemento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Complemento (Opcional)</FormLabel><FormControl><Input placeholder="Apto, Bloco, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField name="endereco.cidade" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <FormField name="endereco.uf" control={form.control} render={({ field }) => (<FormItem><FormLabel>UF</FormLabel><FormControl><Input maxLength={2} placeholder="Ex: SP" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+                <div className="flex justify-end gap-2 pt-6">
+                    {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
+                    <Button type="submit" form="cliente-form">{isEditing ? "Salvar Alterações" : "Cadastrar Cliente"}</Button>
+                </div>
+            </GenericForm>
+            {isReadOnly && (
+                <Alert variant="destructive" className="mt-6">
+                    <IconLock className="h-4 w-4" />
+                    <AlertTitle>Acesso Restrito</AlertTitle>
+                    <AlertDescription>
+                        Apenas administradores podem cadastrar ou editar clientes.
+                    </AlertDescription>
+                </Alert>
+            )}
+        </fieldset>
+    );
+
     const tableControlsComponent = (
         <div className="flex justify-end w-full">
             <ToggleGroup type="single" value={statusFiltro} onValueChange={(value) => value && setStatusFiltro(value as StatusFiltro)}>
@@ -209,85 +326,22 @@ export default function ClientesPage() {
         </div>
     );
 
-    return ( <> <ContasDoClienteModal />
-        <CrudLayout
-            formTitle={isEditing ? "Editar Cliente" : "Novo Cliente"}
-            formContent={(
-                <fieldset disabled={role !== 'ADMINISTRADOR'} className="disabled:opacity-70 disabled:pointer-events-none">
-                <GenericForm schema={formSchema} onSubmit={onSubmit} formId="cliente-form" form={form}>
-                     <div className="space-y-4">
-                        <FormField name="nome" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Nome / Razão Social</FormLabel><FormControl><Input placeholder="Nome completo ou da empresa" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <FormField name="tipoPessoa" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Tipo</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pessoa Física ou Jurídica" /></SelectTrigger></FormControl><SelectContent><SelectItem value="fisica">Pessoa Física</SelectItem><SelectItem value="juridica">Pessoa Jurídica</SelectItem></SelectContent></Select><FormMessage /></FormItem> )} />
-                            <FormField name="documento" control={form.control} render={({ field }) => ( <FormItem><FormLabel>CPF / CNPJ</FormLabel><div className="flex items-center gap-2">
-                                <FormControl><MaskedInput className="w-full" mask={tipoPessoa === 'fisica' ? '000.000.000-00' : '00.000.000/0000-00'} {...field} /></FormControl>
-                                {showCnpjSearch && (<Button type="button" size="icon" variant="outline" onClick={() => handleFetch('cnpj')} disabled={isFetching}>{isFetching ? <IconLoader className="h-4 w-4 animate-spin" /> : <IconSearch className="h-4 w-4" />}</Button>)}
-                            </div><FormMessage /></FormItem> )} />
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <FormField name="telefone" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Telefone</FormLabel><FormControl><MaskedInput mask="(00) 00000-0000" placeholder="(XX) XXXXX-XXXX" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                            <FormField name="email" control={form.control} render={({ field }) => ( <FormItem><FormLabel>E-mail</FormLabel><FormControl><Input type="email" placeholder="contato@email.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                        </div>
-
-                        <Separator className="my-6" />
-                        <h3 className="text-lg font-medium">Dados Fiscais</h3>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <FormField name="indicadorInscricaoEstadual" control={form.control} render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Indicador de Inscrição Estadual</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="1">Contribuinte ICMS (com IE)</SelectItem>
-                                            <SelectItem value="2">Contribuinte isento de IE</SelectItem>
-                                            <SelectItem value="9">Não Contribuinte</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormDescription>Essencial para a emissão de NF-e.</FormDescription>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                             <FormField name="inscricaoEstadual" control={form.control} render={({ field }) => ( <FormItem><FormLabel>Inscrição Estadual</FormLabel><FormControl><Input placeholder="Obrigatório se for Contribuinte" {...field} /></FormControl><FormMessage /></FormItem> )} />
-                        </div>
-
-                        <Separator className="my-6" />
-                        <h3 className="text-lg font-medium">Endereço</h3>
-                        <div className="grid md:grid-cols-[1fr_auto] gap-2">
-                            <FormField name="endereco.cep" control={form.control} render={({ field }) => (<FormItem><FormLabel>CEP</FormLabel><FormControl><MaskedInput mask="00000-000" placeholder="00000-000" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormItem><FormLabel>&nbsp;</FormLabel><div className="flex items-center">
-                                {showCepSearch && <Button type="button" variant="outline" onClick={() => handleFetch('cep')} disabled={isFetching}>{isFetching ? <IconLoader className="h-4 w-4 animate-spin"/> : "Buscar Endereço"}</Button>}
-                            </div></FormItem>
-                        </div>
-                        <div className="grid md:grid-cols-[2fr_1fr] gap-4">
-                            <FormField name="endereco.logradouro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Logradouro</FormLabel><FormControl><Input placeholder="Rua, Av, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField name="endereco.numero" control={form.control} render={({ field }) => (<FormItem><FormLabel>Número</FormLabel><FormControl><Input id="endereco.numero" placeholder="123" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
-                        <FormField name="endereco.complemento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Complemento (Opcional)</FormLabel><FormControl><Input placeholder="Apto, Bloco, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <FormField name="endereco.bairro" control={form.control} render={({ field }) => (<FormItem><FormLabel>Bairro</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField name="endereco.cidade" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cidade</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
-                        <FormField name="endereco.uf" control={form.control} render={({ field }) => (<FormItem><FormLabel>UF</FormLabel><FormControl><Input maxLength={2} placeholder="Ex: SP" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                    </div>
-                    <div className="flex justify-end gap-2 pt-6">
-                        {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                        <Button type="submit" form="cliente-form">{isEditing ? "Salvar Alterações" : "Cadastrar Cliente"}</Button>
-                    </div>
-                </GenericForm>
-                {role !== 'ADMINISTRADOR' && (
-                    <Alert variant="destructive" className="mt-6">
-                        <IconLock className="h-4 w-4" />
-                        <AlertTitle>Acesso Restrito</AlertTitle>
-                        <AlertDescription>
-                            Apenas administradores podem cadastrar ou editar clientes.
-                        </AlertDescription>
-                    </Alert>
-                )}
-                </fieldset>
-            )}
-            tableTitle="Clientes Cadastrados"
-            tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." filterColumnId="nome" renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} /> )}
-        />
-    </> );
+    return (
+        <>
+            <ContasDoClienteModal />
+            <ConfirmationDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                onConfirm={confirmStatusChange}
+                title={`Confirmar ${statusFiltro === 'ativo' ? 'Inativação' : 'Reativação'}`}
+                description={`Tem certeza que deseja ${statusFiltro === 'ativo' ? 'inativar' : 'reativar'} este cliente?`}
+            />
+            <CrudLayout
+                formTitle={isEditing ? "Editar Cliente" : "Novo Cliente"}
+                formContent={formContent}
+                tableTitle="Clientes Cadastrados"
+                tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." filterColumnId="nome" renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} /> )}
+            />
+        </>
+    );
 }

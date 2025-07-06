@@ -65,9 +65,23 @@ export const registrarCompra = async (compraData: CompraPayload) => {
         const produtoDocRef = doc(db, "produtos", item.produtoId);
         const produtoDoc = await transaction.get(produtoDocRef);
         if (!produtoDoc.exists()) throw new Error(`Produto "${item.produtoNome}" não encontrado.`);
+
         const produtoData = produtoDoc.data();
-        const novoEstoque = (produtoData.quantidade || 0) + item.quantidade;
-        transaction.update(produtoDocRef, { quantidade: novoEstoque, custoUnitario: item.custoUnitario });
+        const estoqueAtual = produtoData.quantidade || 0;
+        const custoAntigo = produtoData.custoUnitario || 0;
+
+        const valorEstoqueAntigo = estoqueAtual * custoAntigo;
+        const valorNovaCompra = item.quantidade * item.custoUnitario;
+        const novoEstoqueTotal = estoqueAtual + item.quantidade;
+
+        const novoCustoMedio = novoEstoqueTotal > 0
+          ? (valorEstoqueAntigo + valorNovaCompra) / novoEstoqueTotal
+          : item.custoUnitario;
+
+        transaction.update(produtoDocRef, {
+          quantidade: novoEstoqueTotal,
+          custoUnitario: parseFloat(novoCustoMedio.toFixed(2))
+        });
 
         const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
         transaction.set(movimentacaoDocRef, {

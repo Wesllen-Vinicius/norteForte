@@ -5,9 +5,8 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef } from "@tanstack/react-table";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconLock } from "@tabler/icons-react";
 import { toast } from "sonner";
-import { Timestamp } from "firebase/firestore";
 
 import { CrudLayout } from "@/components/crud-layout";
 import { GenericForm } from "@/components/generic-form";
@@ -15,6 +14,8 @@ import { GenericTable } from "@/components/generic-table";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Cargo, cargoSchema } from "@/lib/schemas";
 import { addCargo, setCargoStatus, updateCargo } from "@/lib/services/cargos.services";
 import { useAuthStore } from "@/store/auth.store";
@@ -24,8 +25,9 @@ type CargoFormValues = z.infer<typeof cargoSchema>;
 
 export default function CargosPage() {
   const cargos = useDataStore((state) => state.cargos);
-  const { user, role } = useAuthStore();
+  const { role } = useAuthStore();
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const isReadOnly = role !== 'ADMINISTRADOR';
 
   const form = useForm<CargoFormValues>({
     resolver: zodResolver(cargoSchema),
@@ -33,12 +35,13 @@ export default function CargosPage() {
   });
 
   const handleEdit = (cargo: Cargo) => {
+    if (isReadOnly) return;
     form.reset(cargo);
     setIsEditing(true);
   };
 
   const handleInactivate = async (id: string) => {
-    if(!confirm("Tem certeza que deseja inativar este cargo?")) return;
+    if (!confirm("Tem certeza que deseja inativar este cargo?")) return;
     try {
       await setCargoStatus(id, 'inativo');
       toast.success("Cargo inativado com sucesso!");
@@ -76,19 +79,28 @@ export default function CargosPage() {
       id: "actions",
       cell: ({ row }) => {
         const item = row.original;
-        // CORREÇÃO: Administradores podem sempre editar.
-        const isEditable = role === 'ADMINISTRADOR';
-
         return (
           <div className="text-right">
-            <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!isEditable}>
-              <IconPencil className="h-4 w-4" />
-            </Button>
-            {role === 'ADMINISTRADOR' && (
-                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
-                    <IconTrash className="h-4 w-4" />
-                </Button>
-            )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={isReadOnly}>
+                    <IconPencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Editar Cargo</p></TooltipContent>
+              </Tooltip>
+              {!isReadOnly && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
+                        <IconTrash className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Inativar Cargo</p></TooltipContent>
+                </Tooltip>
+              )}
+            </TooltipProvider>
           </div>
         )
       }
@@ -96,34 +108,45 @@ export default function CargosPage() {
   ];
 
   const formContent = (
-    <GenericForm
-      schema={cargoSchema}
-      onSubmit={onSubmit}
-      formId="cargo-form"
-      form={form}
-    >
-      <FormField
-        control={form.control}
-        name="nome"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Nome do Cargo</FormLabel>
-            <FormControl>
-              <Input placeholder="Ex: Açougueiro, Gerente de Produção" {...field} />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <div className="flex justify-end gap-2 mt-4">
-          {isEditing && (
-            <Button type="button" variant="outline" onClick={resetForm}>
-              Cancelar
-            </Button>
+    <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+      <GenericForm
+        schema={cargoSchema}
+        onSubmit={onSubmit}
+        formId="cargo-form"
+        form={form}
+      >
+        <FormField
+          control={form.control}
+          name="nome"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Nome do Cargo</FormLabel>
+              <FormControl>
+                <Input placeholder="Ex: Açougueiro, Gerente de Produção" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
           )}
-        <Button type="submit" form="cargo-form">{isEditing ? "Salvar Alterações" : "Adicionar Cargo"}</Button>
-      </div>
-    </GenericForm>
+        />
+        <div className="flex justify-end gap-2 mt-4">
+            {isEditing && (
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancelar
+              </Button>
+            )}
+          <Button type="submit" form="cargo-form">{isEditing ? "Salvar Alterações" : "Adicionar Cargo"}</Button>
+        </div>
+      </GenericForm>
+       {isReadOnly && (
+          <Alert variant="destructive" className="mt-6">
+              <IconLock className="h-4 w-4" />
+              <AlertTitle>Acesso Restrito</AlertTitle>
+              <AlertDescription>
+                  Apenas administradores podem gerenciar cargos.
+              </AlertDescription>
+          </Alert>
+        )}
+    </fieldset>
   );
 
   const tableContent = (

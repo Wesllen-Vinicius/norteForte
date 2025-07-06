@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 // =================================================================
 // Schemas Base e de Autenticação
 // =================================================================
@@ -20,7 +21,7 @@ export type SystemUser = z.infer<typeof userSchema>;
 
 
 // =================================================================
-// Schemas de Cadastros Principais (com campos fiscais)
+// Schemas de Cadastros Principais
 // =================================================================
 
 export const enderecoSchema = z.object({
@@ -31,7 +32,6 @@ export const enderecoSchema = z.object({
     uf: z.string().length(2, "UF deve ter 2 caracteres."),
     cep: z.string().min(8, "O CEP é obrigatório."),
     complemento: z.string().optional(),
-    // Campos adicionados para conformidade fiscal
     pais: z.string().default("Brasil"),
     codigoPais: z.string().default("1058"),
 });
@@ -204,7 +204,6 @@ export const compraSchema = z.object({
     message: "Para pagamentos a prazo, o número de parcelas e a data do primeiro vencimento são obrigatórios.",
     path: ["numeroParcelas"],
 });
-
 export type Compra = z.infer<typeof compraSchema>;
 
 export const abateSchema = z.object({
@@ -388,5 +387,3 @@ export const roleSchema = z.object({
 });
 
 export type Role = z.infer<typeof roleSchema>;
-
-
