@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: "Referência e justificativa são obrigatórias." }, { status: 400 });
         }
 
-        // --- CORREÇÃO PRINCIPAL: Alterado de axios.post para axios.delete ---
         const response = await axios.delete(`${FOCUS_NFE_URL}/v2/nfe/${ref}`, {
             auth: {
                 username: FOCUS_NFE_TOKEN,
@@ -50,7 +49,7 @@ export async function POST(req: NextRequest) {
 
             errorMessage = errorDetails.mensagem || errorDetails.message || "Falha ao cancelar a nota.";
             console.error("Erro na API Focus NF-e (cancelamento):", errorDetails);
-            return NextResponse.json({ message: errorMessage }, { status: axiosError.response.status });
+            return NextResponse.json({ message: errorMessage, erros: errorDetails.erros }, { status: axiosError.response.status });
 
         } else {
             console.error("Erro desconhecido na API de cancelamento:", error);
