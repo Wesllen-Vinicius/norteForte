@@ -87,6 +87,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const { expandedMenus, toggleMenu, setIsNavigating } = useNavigationStore();
     const { open, setOpen } = useSidebar();
     const [isPinned, setIsPinned] = useState(false);
+    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); // **NOVO ESTADO**
 
     useEffect(() => {
         const pinned = localStorage.getItem('sidebar-pinned') === 'true';
@@ -106,7 +107,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     };
 
     const handleMouseLeave = () => {
-        if (!isPinned) setOpen(false);
+        // **LÓGICA ATUALIZADA**
+        if (!isPinned && !isUserMenuOpen) {
+            setOpen(false);
+        }
     };
 
     const handleNavigation = (url: string) => {
@@ -178,7 +182,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavUser />
+                 {/* **PROPRIEDADE onMenuOpenChange ADICIONADA** */}
+                <NavUser onMenuOpenChange={setIsUserMenuOpen} />
             </SidebarFooter>
         </Sidebar>
     );

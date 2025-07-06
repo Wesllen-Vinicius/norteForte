@@ -36,11 +36,3 @@ export const setCargoStatus = async (id: string, status: 'ativo' | 'inativo') =>
     const cargoDoc = doc(db, "cargos", id);
     await updateDoc(cargoDoc, { status });
 };
-
-// A função deleteCargo foi substituída pela setCargoStatus
-/*
-export const deleteCargo = async (id: string) => {
-  const cargoDoc = doc(db, "cargos", id);
-  await deleteDoc(cargoDoc);
-};
-*/
