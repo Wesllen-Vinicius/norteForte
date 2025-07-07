@@ -1,28 +1,25 @@
 "use client"
 
-import { useEffect, useMemo, useState,  ReactElement } from "react";
+import { useEffect, useMemo, useState, ReactElement } from "react";
 import Link from "next/link";
 import { useForm, useFieldArray, useWatch, Control, SubmitHandler, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { IconPlus, IconTrash,  IconPencil, IconFileInvoice, IconAlertTriangle, IconLoader, IconFileDownload, IconFileX, IconX } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconPencil, IconFileInvoice, IconAlertTriangle, IconLoader, IconFileDownload, IconFileX } from "@tabler/icons-react";
 import { ColumnDef, Row } from "@tanstack/react-table";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Combobox } from "@/components/ui/combobox";
 import { NfePreviewModal } from "@/components/nfe-preview-modal";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
 import { Venda, ItemVendido, vendaSchema, Produto, Unidade, CompanyInfo, Cliente } from "@/lib/schemas";
@@ -31,6 +28,7 @@ import { emitirNFe } from "@/lib/services/nfe.services";
 import { getCompanyInfo } from "@/lib/services/settings.services";
 import z from "zod";
 import { DatePicker } from "@/components/date-picker";
+import { Separator } from "@/components/ui/separator";
 
 const itemVendidoFormSchema = z.object({
     produtoId: z.string(),
@@ -49,7 +47,14 @@ const formVendaSchema = vendaSchema.pick({
     contaBancariaId: true, numeroParcelas: true, taxaCartao: true, dataVencimento: true
 }).extend({
     produtos: z.array(itemVendidoFormSchema).min(1, "Adicione pelo menos um produto."),
-});
+}).refine(data => {
+    if (data.condicaoPagamento === 'A_VISTA') return !!data.contaBancariaId;
+    return true;
+}, { message: "Conta de destino é obrigatória para pagamentos à vista.", path: ["contaBancariaId"] })
+.refine(data => {
+    if (data.metodoPagamento === 'Cartão de Crédito') return data.taxaCartao !== undefined && data.taxaCartao >= 0;
+    return true;
+}, { message: "A taxa do cartão é obrigatória.", path: ["taxaCartao"] });
 
 
 type VendaFormValues = z.infer<typeof formVendaSchema>;
@@ -58,59 +63,6 @@ type VendaComDetalhes = Venda & { clienteNome?: string };
 const defaultFormValues: VendaFormValues = {
     clienteId: "", data: new Date(), produtos: [], condicaoPagamento: "A_VISTA", metodoPagamento: "",
     contaBancariaId: "", valorTotal: 0, dataVencimento: new Date(), numeroParcelas: 1, taxaCartao: 0,
-};
-
-const getStatusInfo = (status: string | undefined): { text: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" | "warning" } => {
-    switch (status) {
-        case 'autorizado': return { text: 'Autorizada', variant: 'success' };
-        case 'processando_autorizacao': return { text: 'Processando', variant: 'warning' };
-        case 'cancelado': return { text: 'Cancelada', variant: 'outline' };
-        case 'erro_autorizacao': return { text: 'Erro', variant: 'destructive' };
-        case 'erro_cancelamento': return { text: 'Erro ao Cancelar', variant: 'destructive' };
-        default: return { text: 'Não Emitida', variant: 'secondary' };
-    }
-};
-
-const renderSubComponent = ({ row }: { row: Row<VendaComDetalhes> }):ReactElement => {
-    return (
-        <div className="p-4 bg-muted/20">
-            <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {row.original.produtos.map((p, i) => (
-                    <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
-                        <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
-                        <p><strong>Quantidade:</strong> {p.quantidade}</p>
-                        <p><strong>Preço Un.:</strong> R$ {p.precoUnitario.toFixed(2)}</p>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const ItemProdutoVenda = ({ index, control, remove, handleProdutoChange, produtosParaVendaOptions }: {
-    index: number, control: Control<VendaFormValues>, remove: (i: number) => void,
-    handleProdutoChange: (i: number, id: string) => void, produtosParaVendaOptions: { label: string, value: string }[]
-}) => {
-    const { fieldState } = useController({ name: `produtos.${index}.quantidade`, control });
-    const hasError = !!fieldState.error;
-
-    return(
-        <div className={`p-3 border rounded-md bg-muted/50 space-y-2 transition-all ${hasError ? 'border-destructive' : ''}`}>
-            <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-start">
-                <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field: formField }) => ( <FormItem><Select onValueChange={(value) => {formField.onChange(value); handleProdutoChange(index, value)}} value={formField.value}><FormControl><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger></FormControl><SelectContent>{produtosParaVendaOptions.map(p => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem> )}/>
-                <FormField name={`produtos.${index}.quantidade`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Qtd" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className={hasError ? 'border-destructive focus-visible:ring-destructive' : ''}/></FormControl></FormItem> )}/>
-                <FormField name={`produtos.${index}.precoUnitario`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Preço" {...field} readOnly className="bg-muted-foreground/20" /></FormControl><FormMessage /></FormItem> )} />
-                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><IconTrash className="h-4 w-4 text-destructive" /></Button>
-            </div>
-             <FormField name={`produtos.${index}.quantidade`} control={control} render={() => <FormMessage />} />
-        </div>
-    )
-}
-
-const metodosPagamentoOptions = {
-    vista: [ { value: "Dinheiro", label: "Dinheiro" }, { value: "PIX", label: "PIX" }, { value: "Cartão de Débito", label: "Cartão de Débito" }, { value: "Cartão de Crédito", label: "Cartão de Crédito" } ],
-    prazo: [ { value: "Boleto/Prazo", label: "Boleto/Prazo" }, { value: "PIX", label: "PIX" }, { value: "Dinheiro", label: "Dinheiro" } ]
 };
 
 const NfeActionButton = ({ venda, onPrepareNFe }: { venda: VendaComDetalhes, onPrepareNFe: (venda: VendaComDetalhes) => void }) => {
@@ -149,11 +101,52 @@ const NfeActionButton = ({ venda, onPrepareNFe }: { venda: VendaComDetalhes, onP
     }
 }
 
+const ItemProdutoVenda = ({ index, control, remove, handleProdutoChange, produtosParaVendaOptions }: {
+    index: number, control: Control<VendaFormValues>, remove: (i: number) => void,
+    handleProdutoChange: (i: number, id: string) => void, produtosParaVendaOptions: { label: string, value: string }[]
+}) => {
+    const { fieldState } = useController({ name: `produtos.${index}.quantidade`, control });
+    const hasError = !!fieldState.error;
+
+    return(
+        <div className={`p-3 border rounded-md bg-muted/50 space-y-2 transition-all ${hasError ? 'border-destructive' : ''}`}>
+            <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-start">
+                <FormField name={`produtos.${index}.produtoId`} control={control} render={({ field: formField }) => ( <FormItem><Select onValueChange={(value) => {formField.onChange(value); handleProdutoChange(index, value)}} value={formField.value}><FormControl><SelectTrigger><SelectValue placeholder="Produto" /></SelectTrigger></FormControl><SelectContent>{produtosParaVendaOptions.map(p => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem> )}/>
+                <FormField name={`produtos.${index}.quantidade`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Qtd" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} className={hasError ? 'border-destructive focus-visible:ring-destructive' : ''}/></FormControl></FormItem> )}/>
+                <FormField name={`produtos.${index}.precoUnitario`} control={control} render={({ field }) => ( <FormItem><FormControl><Input type="number" placeholder="Preço" {...field} readOnly className="bg-muted-foreground/20" /></FormControl><FormMessage /></FormItem> )} />
+                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}><IconTrash className="h-4 w-4 text-destructive" /></Button>
+            </div>
+             <FormField name={`produtos.${index}.quantidade`} control={control} render={() => <FormMessage />} />
+        </div>
+    )
+}
+
+const metodosPagamentoOptions = {
+    vista: [ { value: "Dinheiro", label: "Dinheiro" }, { value: "PIX", label: "PIX" }, { value: "Cartão de Débito", label: "Cartão de Débito" }, { value: "Cartão de Crédito", label: "Cartão de Crédito" } ],
+    prazo: [ { value: "Boleto/Prazo", label: "Boleto/Prazo" }, { value: "PIX", label: "PIX" }, { value: "Dinheiro", label: "Dinheiro" } ]
+};
+
+const renderSubComponent = ({ row }: { row: Row<VendaComDetalhes> }):ReactElement => {
+    return (
+        <div className="p-4 bg-muted/20">
+            <h4 className="font-semibold text-sm mb-2">Itens da Venda</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {row.original.produtos.map((p, i) => (
+                    <div key={i} className="text-xs p-2.5 border rounded-lg bg-background shadow-sm">
+                        <p className="font-bold text-sm mb-1">{p.produtoNome}</p>
+                        <p><strong>Quantidade:</strong> {p.quantidade}</p>
+                        <p><strong>Preço Un.:</strong> R$ {p.precoUnitario.toFixed(2)}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 
 export default function VendasPage() {
     const { produtos, clientes, vendas, unidades, contasBancarias } = useDataStore();
     const { user, role } = useAuthStore();
-    const [isFormVisible, setIsFormVisible] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [valorFinalCalculado, setValorFinalCalculado] = useState(0);
@@ -165,6 +158,7 @@ export default function VendasPage() {
     const form = useForm<VendaFormValues>({ resolver: zodResolver(formVendaSchema), defaultValues: defaultFormValues, mode: "onChange" });
     const { fields, append, remove } = useFieldArray({ control: form.control, name: "produtos" });
 
+    const clienteId = useWatch({ control: form.control, name: "clienteId" });
     const condicaoPagamento = useWatch({ control: form.control, name: 'condicaoPagamento' });
     const metodoPagamento = useWatch({ control: form.control, name: 'metodoPagamento' });
     const valorTotal = useWatch({ control: form.control, name: 'valorTotal' });
@@ -179,12 +173,13 @@ export default function VendasPage() {
         const faltantes = [];
         if (!clientes || clientes.length === 0) faltantes.push({ nome: "Clientes", link: "/dashboard/clientes" });
         if (produtos.filter(p => p.tipoProduto === 'VENDA').length === 0) faltantes.push({ nome: "Produtos de Venda", link: "/dashboard/produtos" });
+        if (!contasBancarias || contasBancarias.length === 0) faltantes.push({ nome: "Contas Bancárias", link: "/dashboard/financeiro/contas-bancarias" });
         return faltantes;
-    }, [clientes, produtos]);
+    }, [clientes, produtos, contasBancarias]);
 
     useEffect(() => {
         const total = form.getValues('produtos').reduce((acc, item) => acc + ((item.quantidade || 0) * (item.precoUnitario || 0)), 0);
-        form.setValue('valorTotal', total);
+        form.setValue('valorTotal', total, { shouldValidate: true });
     }, [form, form.watch('produtos')]);
 
     useEffect(() => {
@@ -211,13 +206,7 @@ export default function VendasPage() {
         form.reset(defaultFormValues);
         setIsEditing(false);
         setEditingId(null);
-        setIsFormVisible(false);
     }
-
-    const handleAddNew = () => {
-        resetForm();
-        setIsFormVisible(true);
-    };
 
     const handleEdit = (venda: VendaComDetalhes) => {
         if (isReadOnly) return;
@@ -226,7 +215,6 @@ export default function VendasPage() {
             ...venda, data: venda.data, dataVencimento: venda.dataVencimento || undefined,
             produtos: venda.produtos.map(p => ({ ...p, estoqueDisponivel: produtos.find(prod => prod.id === p.produtoId)?.quantidade || 0 }))
         });
-        setIsFormVisible(true);
     };
 
     const onSubmit: SubmitHandler<VendaFormValues> = async (values) => {
@@ -293,53 +281,91 @@ export default function VendasPage() {
         { id: "edit_action", cell: ({ row }) => ( <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)} disabled={isReadOnly}><IconPencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent><p>Editar Venda</p></TooltipContent></Tooltip></TooltipProvider> )}
     ];
 
-    if (dependenciasFaltantes.length > 0) {
-        return ( <div className="container mx-auto py-8 px-4 md:px-6"><Alert variant="destructive"><AlertTitle>Cadastro de pré-requisito necessário</AlertTitle><AlertDescription>Para registrar uma venda, cadastre: <ul className="list-disc pl-5 mt-2">{dependenciasFaltantes.map(dep => (<li key={dep.nome}><Button variant="link" asChild className="p-0 h-auto font-bold"><Link href={dep.link}>{dep.nome}</Link></Button></li>))}</ul></AlertDescription></Alert></div> );
-    }
-
     return (
-        <div className="container mx-auto py-8 px-4 md:px-6 space-y-6">
+        <div className="container mx-auto py-8 px-4 md:px-6">
             <NfePreviewModal isOpen={isNfeModalOpen} onOpenChange={setIsNfeModalOpen} previewData={nfePreviewData} onSubmit={handleConfirmAndEmitNFe} isLoading={isEmittingNfe} />
+            <div className="grid grid-cols-1 xl:grid-cols-7 gap-6">
 
-            {isFormVisible ? (
-                 <Card>
-                    <CardHeader><CardTitle>{isEditing ? "Editar Venda" : "Registrar Nova Venda"}</CardTitle><CardDescription>Preencha os detalhes abaixo.</CardDescription></CardHeader>
-                    <CardContent>
-                        <fieldset disabled={isReadOnly} className="disabled:opacity-70">
-                            <Form {...form}>
-                                <form onSubmit={form.handleSubmit(onSubmit)} id="venda-form" className="space-y-4">
-                                    <Accordion type="multiple" defaultValue={['item-1', 'item-2', 'item-3']} className="w-full">
-                                        <AccordionItem value="item-1">
-                                            <AccordionTrigger className="text-lg font-semibold">1. Dados Principais</AccordionTrigger>
-                                            <AccordionContent className="pt-4"><div className="grid md:grid-cols-2 gap-4"><FormField name="clienteId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cliente</FormLabel><Combobox options={clientesOptions} {...field} placeholder="Selecione um cliente" /></FormItem>)} /><FormField name="data" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data da Venda</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent>
-                                        </AccordionItem>
-                                        <AccordionItem value="item-2">
-                                            <AccordionTrigger className="text-lg font-semibold">2. Produtos</AccordionTrigger>
-                                            <AccordionContent className="pt-4 space-y-3"><FormLabel>Produtos Vendidos</FormLabel>{fields.map((field, index) => (<ItemProdutoVenda key={field.id} index={index} control={form.control} remove={remove} handleProdutoChange={handleProdutoChange} produtosParaVendaOptions={produtosParaVendaOptions} />))}<Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 1, precoUnitario: 0, produtoNome: "", custoUnitario: 0, estoqueDisponivel: 0, })}><IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto</Button></AccordionContent>
-                                        </AccordionItem>
-                                        <AccordionItem value="item-3">
-                                            <AccordionTrigger className="text-lg font-semibold">3. Pagamento</AccordionTrigger>
-                                            <AccordionContent className="pt-4 space-y-4"><div className="grid md:grid-cols-2 gap-4 items-start"><FormField name="condicaoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Condição</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="A_VISTA">À Vista</SelectItem><SelectItem value="A_PRAZO">A Prazo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />{condicaoPagamento === "A_VISTA" ? (<FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.vista.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />) : (<div className="grid grid-cols-2 gap-4"><FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.prazo.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><FormField name="dataVencimento" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Vencimento</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div>)}</div><FormField name="contaBancariaId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Conta de Destino</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl><SelectContent>{contasBancariasOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormDescription>Onde o valor da venda será creditado.</FormDescription><FormMessage /></FormItem>)} />{metodoPagamento === "Cartão de Crédito" && (<div className="grid md:grid-cols-3 gap-4 items-end pt-4"><FormField name="taxaCartao" control={form.control} render={({ field }) => (<FormItem><FormLabel>Taxa (%)</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl><FormMessage /></FormItem>)} /><FormField name="numeroParcelas" control={form.control} render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (<SelectItem key={p} value={String(p)}>{p}x</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><div className="text-right"><p className="text-sm text-muted-foreground">Valor Parcela</p><p className="text-lg font-bold">R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}</p></div></div>)}</AccordionContent>
-                                        </AccordionItem>
-                                    </Accordion>
+                <div className="xl:col-span-3 space-y-6">
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} id="venda-form" className="space-y-6">
+                            <Card>
+                                <CardHeader><CardTitle>{isEditing ? "Editar Venda" : "1. Cliente e Produtos"}</CardTitle></CardHeader>
+                                <CardContent>
+                                    {dependenciasFaltantes.length > 0 && !isEditing ? (
+                                        <Alert variant="destructive">
+                                            <IconAlertTriangle className="h-4 w-4" />
+                                            <AlertTitle>Cadastro de pré-requisito necessário</AlertTitle>
+                                            <AlertDescription> Para registrar uma venda, você precisa primeiro cadastrar:
+                                                <ul className="list-disc pl-5 mt-2">{dependenciasFaltantes.map(dep => (
+                                                    <li key={dep.nome}><Button variant="link" asChild className="p-0 h-auto font-bold"><Link href={dep.link}>{dep.nome}</Link></Button></li>
+                                                ))}</ul>
+                                            </AlertDescription>
+                                        </Alert>
+                                    ) : (
+                                        <fieldset disabled={isReadOnly} className="space-y-4">
+                                            <div className="grid md:grid-cols-2 gap-4">
+                                                <FormField name="clienteId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Cliente</FormLabel><Combobox options={clientesOptions} {...field} placeholder="Selecione um cliente" /></FormItem>)} />
+                                                <FormField name="data" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data da Venda</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
+                                            </div>
+                                            <Separator />
+                                            <fieldset disabled={!clienteId} className="space-y-3 disabled:opacity-50">
+                                                <FormLabel>Produtos Vendidos</FormLabel>
+                                                {fields.map((field, index) => (<ItemProdutoVenda key={field.id} index={index} control={form.control} remove={remove} handleProdutoChange={handleProdutoChange} produtosParaVendaOptions={produtosParaVendaOptions} />))}
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="inline-block">
+                                                                <Button type="button" variant="outline" size="sm" onClick={() => append({ produtoId: "", quantidade: 1, precoUnitario: 0, produtoNome: "", custoUnitario: 0, estoqueDisponivel: 0, })} disabled={!clienteId}><IconPlus className="mr-2 h-4 w-4" /> Adicionar Produto</Button>
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        {!clienteId && <TooltipContent><p>Selecione um cliente para adicionar produtos.</p></TooltipContent>}
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </fieldset>
+                                        </fieldset>
+                                    )}
+                                </CardContent>
+                            </Card>
 
-                                    <div className="flex justify-between items-center pt-4 border-t mt-8"><div><p className="text-sm text-muted-foreground">Valor Final da Venda</p><p className="text-3xl font-bold">R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}</p></div><div className="flex gap-2"><Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button><Button type="submit" size="lg" disabled={!form.formState.isValid}>{isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}</Button></div></div>
-                                </form>
-                            </Form>
-                        </fieldset>
-                    </CardContent>
-                 </Card>
-            ) : (
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <div><CardTitle>Histórico de Vendas</CardTitle><CardDescription>Visualize e gerencie todas as suas vendas.</CardDescription></div>
-                        <Button onClick={handleAddNew} disabled={isReadOnly}><IconPlus className="mr-2 h-4 w-4" /> Nova Venda</Button>
-                    </CardHeader>
-                    <CardContent>
-                        <GenericTable columns={columns} data={vendasEnriquecidas} filterPlaceholder="Pesquisar por cliente..." filterColumnId="clienteNome" renderSubComponent={renderSubComponent} />
-                    </CardContent>
-                </Card>
-            )}
+                            <Card>
+                                <CardHeader><CardTitle>2. Pagamento e Finalização</CardTitle></CardHeader>
+                                <CardContent>
+                                    <fieldset disabled={isReadOnly || fields.length === 0} className="space-y-4 disabled:opacity-50">
+                                        <div className="grid md:grid-cols-2 gap-4 items-start">
+                                            <FormField name="condicaoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Condição</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent><SelectItem value="A_VISTA">À Vista</SelectItem><SelectItem value="A_PRAZO">A Prazo</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                            {condicaoPagamento === "A_VISTA" ? (
+                                                <FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.vista.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} />
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-4"><FormField name="metodoPagamento" control={form.control} render={({ field }) => (<FormItem><FormLabel>Método</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent>{metodosPagamentoOptions.prazo.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><FormField name="dataVencimento" control={form.control} render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Vencimento</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} /></div>
+                                            )}
+                                        </div>
+                                        <FormField name="contaBancariaId" control={form.control} render={({ field }) => (<FormItem><FormLabel>Conta de Destino</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a conta..." /></SelectTrigger></FormControl><SelectContent>{contasBancariasOptions.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}</SelectContent></Select><FormDescription>Onde o valor da venda será creditado.</FormDescription><FormMessage /></FormItem>)} />
+                                        {metodoPagamento === "Cartão de Crédito" && (<div className="grid md:grid-cols-3 gap-4 items-end pt-4"><FormField name="taxaCartao" control={form.control} render={({ field }) => (<FormItem><FormLabel>Taxa (%)</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl><FormMessage /></FormItem>)} /><FormField name="numeroParcelas" control={form.control} render={({ field }) => (<FormItem><FormLabel>Parcelas</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 12 }, (_, i) => i + 1).map((p) => (<SelectItem key={p} value={String(p)}>{p}x</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)} /><div className="text-right"><p className="text-sm text-muted-foreground">Valor Parcela</p><p className="text-lg font-bold">R$ {(valorFinalCalculado / (numeroParcelas || 1)).toFixed(2)}</p></div></div>)}
+                                    </fieldset>
+                                     <div className="flex justify-between items-center pt-6 border-t mt-6">
+                                        <div><p className="text-sm text-muted-foreground">Valor Final da Venda</p><p className="text-3xl font-bold">R$ {valorFinalCalculado.toFixed(2).replace(".", ",")}</p></div>
+                                        <div className="flex gap-2">
+                                            <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
+                                            <Button type="submit" form="venda-form" size="lg" disabled={!form.formState.isValid}>{isEditing ? 'Salvar Alterações' : 'Finalizar Venda'}</Button>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </form>
+                    </Form>
+                </div>
+
+                <div className="xl:col-span-4">
+                     <Card>
+                        <CardHeader><CardTitle>Histórico de Vendas</CardTitle></CardHeader>
+                        <CardContent>
+                            <GenericTable columns={columns} data={vendasEnriquecidas} filterPlaceholder="Pesquisar por cliente..." filterColumnId="clienteNome" renderSubComponent={renderSubComponent} />
+                        </CardContent>
+                    </Card>
+                </div>
+
+            </div>
         </div>
     );
 }
