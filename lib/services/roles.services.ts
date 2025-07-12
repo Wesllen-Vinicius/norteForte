@@ -9,27 +9,30 @@ import {
     deleteDoc,
     serverTimestamp,
     QuerySnapshot,
-    DocumentData
+    DocumentData,
+    query,
+    where
 } from "firebase/firestore";
-import { Role } from "@/lib/schemas"; // <- Importa do schema central
+import { Role } from "@/lib/schemas";
 
-export const addRole = (data: Omit<Role, 'id'>) => {
-    const dataWithTimestamp = { ...data, createdAt: serverTimestamp() };
+export const addRole = (data: Omit<Role, 'id' | 'createdAt' | 'status'>) => {
+    const dataWithTimestamp = { ...data, status: 'ativo', createdAt: serverTimestamp() };
     return addDoc(collection(db, "roles"), dataWithTimestamp);
 };
 
-export const updateRole = (id: string, data: Partial<Omit<Role, 'id'>>) => {
+export const updateRole = (id: string, data: Partial<Omit<Role, 'id' | 'createdAt' | 'status'>>) => {
     const roleDoc = doc(db, "roles", id);
     return updateDoc(roleDoc, data);
 };
 
-export const deleteRole = (id: string) => {
+export const setRoleStatus = (id: string, status: 'ativo' | 'inativo') => {
     const roleDoc = doc(db, "roles", id);
-    return deleteDoc(roleDoc);
+    return updateDoc(roleDoc, { status });
 };
 
 export const subscribeToRoles = (callback: (roles: Role[]) => void) => {
-    return onSnapshot(collection(db, "roles"), (snapshot: QuerySnapshot<DocumentData>) => {
+    const q = query(collection(db, "roles"), where("status", "==", "ativo"));
+    return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
         const roles: Role[] = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
