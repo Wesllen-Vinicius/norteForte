@@ -1,3 +1,4 @@
+// lib/services/vendas.services.ts
 import { db } from "@/lib/firebase";
 import { collection, doc, runTransaction, serverTimestamp, Timestamp, onSnapshot, QuerySnapshot, DocumentData, updateDoc, query, orderBy } from "firebase/firestore";
 import { Venda } from "@/lib/schemas";
@@ -5,12 +6,22 @@ import { Venda } from "@/lib/schemas";
 export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' | 'status'>, clienteNome: string) => {
   try {
     await runTransaction(db, async (transaction) => {
-
+      // --- ETAPA 1: LEITURA DE TODOS OS DOCUMENTOS ---
       const produtoRefs = vendaData.produtos.map(item => doc(db, "produtos", item.produtoId));
       const produtoDocs = await Promise.all(produtoRefs.map(ref => transaction.get(ref)));
 
-      const produtosParaSalvar = [];
+      // Lê a conta bancária de destino, se aplicável, no início da transação
+      let contaBancariaDoc = null;
+      if (vendaData.contaBancariaId && vendaData.condicaoPagamento === 'A_VISTA') {
+        const contaRef = doc(db, "contasBancarias", vendaData.contaBancariaId);
+        contaBancariaDoc = await transaction.get(contaRef);
+        if (!contaBancariaDoc.exists()) {
+          throw new Error("Conta bancária de destino não encontrada.");
+        }
+      }
 
+      // --- ETAPA 2: VALIDAÇÃO DOS DADOS LIDOS ---
+      const produtosParaSalvar = [];
       for (let i = 0; i < produtoDocs.length; i++) {
         const produtoDoc = produtoDocs[i];
         const item = vendaData.produtos[i];
@@ -24,10 +35,10 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
         if (estoqueAtual < item.quantidade) {
           throw new Error(`Estoque de "${item.produtoNome}" (${estoqueAtual}) insuficiente para a venda de ${item.quantidade}.`);
         }
-         produtosParaSalvar.push({ ...item, custoUnitario: dadosProduto.custoUnitario || 0 });
+        produtosParaSalvar.push({ ...item, custoUnitario: dadosProduto.custoUnitario || 0 });
       }
 
-
+      // --- ETAPA 3: OPERAÇÕES DE ESCRITA ---
       const vendaDocRef = doc(collection(db, "vendas"));
       const statusVenda = vendaData.condicaoPagamento === 'A_VISTA' ? 'Paga' : 'Pendente';
 
@@ -41,7 +52,7 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
       };
       transaction.set(vendaDocRef, dadosVendaFinal);
 
-
+      // Atualiza o estoque de cada produto e registra a movimentação
       for (let i = 0; i < produtoDocs.length; i++) {
         const produtoRef = produtoRefs[i];
         const produtoData = produtoDocs[i].data();
@@ -61,6 +72,7 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
         });
       }
 
+      // Cria a conta a receber se a venda for a prazo
       if (vendaData.condicaoPagamento === 'A_PRAZO' && vendaData.dataVencimento) {
         const contaReceberRef = doc(collection(db, "contasAReceber"));
         transaction.set(contaReceberRef, {
@@ -73,17 +85,12 @@ export const registrarVenda = async (vendaData: Omit<Venda, 'id' | 'createdAt' |
         });
       }
 
-      if (vendaData.contaBancariaId && statusVenda === 'Paga') {
-        const contaRef = doc(db, "contasBancarias", vendaData.contaBancariaId);
-        const contaDoc = await transaction.get(contaRef);
-        if (!contaDoc.exists()) {
-          throw new Error("Conta bancária de destino não encontrada.");
-        }
+      // Atualiza o saldo da conta bancária se a venda for à vista
+      if (contaBancariaDoc && contaBancariaDoc.exists()) {
         const valorFinal = vendaData.valorFinal ?? vendaData.valorTotal;
-        const novoSaldo = (contaDoc.data().saldoAtual || 0) + valorFinal;
-        transaction.update(contaRef, { saldoAtual: novoSaldo });
+        const novoSaldo = (contaBancariaDoc.data().saldoAtual || 0) + valorFinal;
+        transaction.update(contaBancariaDoc.ref, { saldoAtual: novoSaldo });
       }
-
     });
   } catch (error) {
     console.error("Erro ao registrar venda: ", error);
