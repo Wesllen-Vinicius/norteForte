@@ -108,12 +108,12 @@ export default function FuncionariosPage() {
     };
 
     const handleInactivate = async (id: string) => {
-        if (!confirm("Tem certeza que deseja inativar este prestador?")) return;
+        if (!confirm("Tem certeza que deseja inativar este funcionário?")) return;
         try {
             await setFuncionarioStatus(id, 'inativo');
-            toast.success("Prestador inativado com sucesso!");
+            toast.success("Funcionário inativado com sucesso!");
         } catch {
-            toast.error("Erro ao inativar o prestador.");
+            toast.error("Erro ao inativar o funcionário.");
         }
     };
 
@@ -123,7 +123,7 @@ export default function FuncionariosPage() {
     };
 
     const onSubmit = async (values: FuncionarioFormValues) => {
-        const toastId = toast.loading("Salvando prestador...");
+        const toastId = toast.loading("Salvando funcionário...");
         try {
             const { id, ...data } = values;
             if (isEditing && id) {
@@ -131,7 +131,7 @@ export default function FuncionariosPage() {
                 toast.success("Dados atualizados com sucesso!", { id: toastId });
             } else {
                 await addFuncionario(data);
-                toast.success(`Prestador "${data.nomeCompleto}" cadastrado com sucesso!`, { id: toastId });
+                toast.success(`Funcionário "${data.nomeCompleto}" cadastrado com sucesso!`, { id: toastId });
             }
             resetForm();
         } catch(error: any) {
@@ -140,12 +140,12 @@ export default function FuncionariosPage() {
     };
 
     const renderSubComponent = useCallback(({ row }: { row: Row<Funcionario> }) => {
-        const prestador = row.original;
+        const funcionario = row.original;
         const details = [
-            { label: "CPF", value: prestador.cpf || 'N/A' },
-            { label: "Banco", value: prestador.banco },
-            { label: "Agência", value: prestador.agencia },
-            { label: "Conta", value: prestador.conta },
+            { label: "CPF", value: funcionario.cpf || 'N/A' },
+            { label: "Banco", value: funcionario.banco },
+            { label: "Agência", value: funcionario.agencia },
+            { label: "Conta", value: funcionario.conta },
         ];
         return <DetailsSubRow details={details} />;
     }, []);
@@ -158,26 +158,26 @@ export default function FuncionariosPage() {
         {
             id: "actions",
             cell: ({ row }) => {
-                const prestador = row.original;
+                const funcionario = row.original;
                 return (
                     <div className="text-right">
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(prestador)} disabled={isReadOnly}>
+                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(funcionario)} disabled={isReadOnly}>
                                         <IconPencil className="h-4 w-4" />
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent><p>Editar Prestador</p></TooltipContent>
+                                <TooltipContent><p>Editar Funcionário</p></TooltipContent>
                             </Tooltip>
                             {!isReadOnly && (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(prestador.id!)}>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(funcionario.id!)}>
                                             <IconTrash className="h-4 w-4" />
                                         </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent><p>Inativar Prestador</p></TooltipContent>
+                                    <TooltipContent><p>Inativar Funcionário</p></TooltipContent>
                                 </Tooltip>
                             )}
                         </TooltipProvider>
@@ -290,7 +290,7 @@ export default function FuncionariosPage() {
 
                     <div className="flex justify-end gap-2 pt-8">
                         {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                        <Button type="submit" form="funcionario-form">{isEditing ? "Salvar Alterações" : "Cadastrar Prestador"}</Button>
+                        <Button type="submit" form="funcionario-form">{isEditing ? "Salvar Alterações" : "Cadastrar Funcionário"}</Button>
                     </div>
                 </GenericForm>
                 {isReadOnly && (
@@ -298,7 +298,7 @@ export default function FuncionariosPage() {
                         <IconLock className="h-4 w-4" />
                         <AlertTitle>Acesso Restrito</AlertTitle>
                         <AlertDescription>
-                            Apenas administradores podem gerenciar prestadores de serviço.
+                            Apenas administradores podem gerenciar funcionários.
                         </AlertDescription>
                     </Alert>
                 )}
@@ -308,9 +308,9 @@ export default function FuncionariosPage() {
 
     return (
         <CrudLayout
-            formTitle={isEditing ? "Editar Prestador" : "Novo Prestador de Serviço"}
+            formTitle={isEditing ? "Editar Funcionário" : "Novo Funcionário"}
             formContent={formContent}
-            tableTitle="Prestadores Cadastrados"
+            tableTitle="Funcionários Cadastrados"
             tableContent={( <GenericTable columns={columns} data={funcionariosComCargo} filterPlaceholder="Filtrar por nome..." filterColumnId="nomeCompleto" renderSubComponent={renderSubComponent} /> )}
         />
     );
