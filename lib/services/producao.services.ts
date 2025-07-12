@@ -1,100 +1,29 @@
-import { db } from "@/lib/firebase";
-import { collection, doc, runTransaction, serverTimestamp, onSnapshot, QuerySnapshot, DocumentData, Timestamp, updateDoc, query, where, orderBy } from "firebase/firestore";
-import { z } from "zod";
+import { db, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { collection, doc, onSnapshot, QuerySnapshot, DocumentData, Timestamp, updateDoc, query } from "firebase/firestore";
 import { Producao, producaoSchema, ProducaoFormValues, Abate } from "@/lib/schemas";
 
+/**
+ * Registra uma nova produção de forma segura através de uma Cloud Function.
+ * A lógica da transação foi movida para o servidor para garantir a integridade dos dados.
+ */
 export const registrarProducao = async (producaoData: ProducaoFormValues, user: { uid: string; nome: string; role?: 'ADMINISTRADOR' | 'USUARIO' }) => {
   try {
-    await runTransaction(db, async (transaction) => {
-      // --- ETAPA 1: LEITURA DE TODOS OS DOCUMENTOS ---
-      if (!producaoData.abateId) throw new Error("O abate de origem é obrigatório.");
+    const registrarProducaoFunction = httpsCallable(functions, 'registrarProducaoHttps');
 
-      const abateRef = doc(db, "abates", producaoData.abateId);
-      const abateDoc = await transaction.get(abateRef);
-      if (!abateDoc.exists()) throw new Error("O registro de abate selecionado não foi encontrado.");
+    // Prepara o payload, convertendo a data para string ISO.
+    // O objeto 'user' é removido, pois a identidade do usuário será
+    // obtida de forma segura no backend através do token de autenticação.
+    const payload = {
+      ...producaoData,
+      data: producaoData.data.toISOString(),
+    };
 
-      const abate = abateDoc.data() as Abate;
-      if (!abate.compraId) throw new Error("O abate selecionado não está vinculado a uma compra de matéria-prima.");
-
-      const compraRef = doc(db, "compras", abate.compraId);
-      const compraDoc = await transaction.get(compraRef);
-      if (!compraDoc.exists()) throw new Error("A compra vinculada ao abate não foi encontrada.");
-
-      const compraData = compraDoc.data();
-      const animalItem = compraData.itens.find((item: any) => item.produtoNome.toLowerCase().includes('animal'));
-      if (!animalItem) throw new Error("Não foi possível identificar a matéria-prima principal na compra vinculada.");
-
-      const materiaPrimaRef = doc(db, "produtos", animalItem.produtoId);
-      const materiaPrimaDoc = await transaction.get(materiaPrimaRef);
-      if (!materiaPrimaDoc.exists()) throw new Error("Matéria-prima principal não encontrada no estoque.");
-
-      const produtosAcabadosRefs = producaoData.produtos.map(item => doc(db, "produtos", item.produtoId));
-      const produtosAcabadosDocs = await Promise.all(produtosAcabadosRefs.map(ref => transaction.get(ref)));
-
-      // --- ETAPA 2: VALIDAÇÃO DOS DADOS LIDOS ---
-      const materiaPrimaData = materiaPrimaDoc.data();
-      if (!materiaPrimaData) throw new Error("Dados da matéria-prima não encontrados.");
-
-      const estoqueAtualMateriaPrima = materiaPrimaData.quantidade || 0;
-      const novoEstoqueMateriaPrima = estoqueAtualMateriaPrima - abate.total;
-      if (novoEstoqueMateriaPrima < 0) throw new Error(`Estoque insuficiente de "${animalItem.produtoNome}" para o abate.`);
-
-      for (let i = 0; i < produtosAcabadosDocs.length; i++) {
-        const produtoDoc = produtosAcabadosDocs[i];
-        if (!produtoDoc.exists()) {
-          throw new Error(`Produto acabado "${producaoData.produtos[i].produtoNome}" não foi encontrado.`);
-        }
-      }
-
-      // --- ETAPA 3: OPERAÇÕES DE ESCRITA ---
-      const producaoDocRef = doc(collection(db, "producoes"));
-      const dataToSave = {
-        ...producaoData,
-        data: Timestamp.fromDate(producaoData.data),
-        registradoPor: user,
-        status: 'ativo',
-        createdAt: serverTimestamp(),
-      };
-      transaction.set(producaoDocRef, dataToSave);
-
-      transaction.update(materiaPrimaRef, { quantidade: novoEstoqueMateriaPrima });
-
-      const movMateriaPrimaRef = doc(collection(db, "movimentacoesEstoque"));
-      transaction.set(movMateriaPrimaRef, {
-        produtoId: animalItem.produtoId,
-        produtoNome: animalItem.produtoNome,
-        quantidade: abate.total,
-        tipo: 'saida',
-        motivo: `Consumido na Produção Lote: ${producaoData.lote || producaoDocRef.id.slice(-5)}`,
-        data: serverTimestamp(),
-      });
-
-      for (let i = 0; i < produtosAcabadosDocs.length; i++) {
-        const produtoRef = produtosAcabadosRefs[i];
-        const produtoDoc = produtosAcabadosDocs[i];
-        const item = producaoData.produtos[i];
-        const produtoData = produtoDoc.data();
-
-        if (produtoData) { // <-- Correção aqui
-          const estoqueAtual = produtoData.quantidade || 0;
-          const novoEstoque = estoqueAtual + item.quantidade;
-          transaction.update(produtoRef, { quantidade: novoEstoque });
-
-          const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
-          transaction.set(movimentacaoDocRef, {
-            produtoId: item.produtoId,
-            produtoNome: item.produtoNome,
-            quantidade: item.quantidade,
-            tipo: 'entrada',
-            motivo: `Produção Lote: ${producaoData.lote || producaoDocRef.id.slice(-5)}`,
-            data: serverTimestamp(),
-          });
-        }
-      }
-    });
-  } catch (error) {
-    console.error("Erro ao registrar produção: ", error);
-    throw error;
+    await registrarProducaoFunction(payload);
+  } catch (error: any) {
+    console.error("Erro ao chamar a Cloud Function de registrar produção: ", error);
+    // Repassa a mensagem de erro vinda do backend para o frontend.
+    throw new Error(error.message || "Falha ao registrar a produção.");
   }
 };
 

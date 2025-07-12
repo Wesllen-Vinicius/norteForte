@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useAuthStore } from "@/store/auth.store";
 import { Role, roleSchema, modulosDePermissao } from "@/lib/schemas";
-import { addRole, updateRole, subscribeToRoles, deleteRole } from "@/lib/services/roles.services";
+import { addRole, updateRole, subscribeToRoles, setRoleStatus } from "@/lib/services/roles.services";
 import { DetailsSubRow } from "@/components/details-sub-row";
 import { PermissionManager } from "@/components/permission-manager";
 
@@ -53,13 +53,13 @@ export default function PermissoesPage() {
         setIsEditing(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Tem certeza que deseja excluir esta função?")) return;
+    const handleInactivate = async (id: string) => {
+        if (!confirm("Tem certeza que deseja inativar esta função? Os usuários com esta função podem perder o acesso a certas áreas.")) return;
         try {
-            await deleteRole(id);
-            toast.success("Função excluída com sucesso!");
+            await setRoleStatus(id, 'inativo');
+            toast.success("Função inativada com sucesso!");
         } catch (error: any) {
-            toast.error("Erro ao excluir função.", { description: error.message });
+            toast.error("Erro ao inativar função.", { description: error.message });
         }
     };
 
@@ -78,7 +78,7 @@ export default function PermissoesPage() {
                 await updateRole(id, data);
                 toast.success("Função atualizada com sucesso!");
             } else {
-                await addRole(data as Omit<Role, 'id'>);
+                await addRole(data as Omit<Role, 'id' | 'createdAt' | 'status'>);
                 toast.success("Função criada com sucesso!");
             }
             resetForm();
@@ -113,7 +113,7 @@ export default function PermissoesPage() {
             cell: ({ row }) => (
                 <div className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(row.original)}><IconPencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => { if(row.original.id) handleDelete(row.original.id) }}><IconTrash className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => { if(row.original.id) handleInactivate(row.original.id) }}><IconTrash className="h-4 w-4" /></Button>
                 </div>
             )
         }
@@ -153,7 +153,6 @@ export default function PermissoesPage() {
                     data={roles}
                     filterPlaceholder="Filtrar por nome..."
                     filterColumnId="nome"
-                    // **TABELA AGORA É EXPANSÍVEL**
                     renderSubComponent={renderSubComponent}
                 />
             )}

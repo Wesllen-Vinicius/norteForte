@@ -19,6 +19,7 @@ import { subscribeToContasAReceber, receberPagamento } from "@/lib/services/cont
 import { ContaAReceber } from "@/lib/schemas";
 import { DetailsSubRow } from "@/components/details-sub-row";
 import Link from "next/link";
+import { IconLoader } from "@tabler/icons-react";
 
 type ContaComNome = ContaAReceber & { clienteNome?: string };
 
@@ -30,6 +31,7 @@ export default function ContasAReceberPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedConta, setSelectedConta] = useState<ContaAReceber | null>(null);
     const [selectedContaBancaria, setSelectedContaBancaria] = useState<string>("");
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         const unsubContas = subscribeToContasAReceber((data) => {
@@ -55,13 +57,15 @@ export default function ContasAReceberPage() {
             return;
         }
 
+        setIsProcessing(true);
         try {
             await receberPagamento(selectedConta, selectedContaBancaria, user);
             toast.success("Conta recebida e baixada com sucesso!");
+            setIsDialogOpen(false);
         } catch (error: any) {
             toast.error("Falha ao processar recebimento.", { description: error.message });
         } finally {
-            setIsDialogOpen(false);
+            setIsProcessing(false);
             setSelectedConta(null);
             setSelectedContaBancaria("");
         }
@@ -126,8 +130,11 @@ export default function ContasAReceberPage() {
                          </div>
                     </div>
                     <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                        <Button type="button" onClick={handleConfirmRecebimento} disabled={!selectedContaBancaria}>Confirmar Recebimento</Button>
+                        <DialogClose asChild><Button type="button" variant="outline" disabled={isProcessing}>Cancelar</Button></DialogClose>
+                        <Button type="button" onClick={handleConfirmRecebimento} disabled={!selectedContaBancaria || isProcessing}>
+                            {isProcessing && <IconLoader className="mr-2 h-4 w-4 animate-spin" />}
+                            {isProcessing ? "Processando..." : "Confirmar Recebimento"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

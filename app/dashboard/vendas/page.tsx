@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState, ReactElement } from "react";
 import Link from "next/link";
-import { useForm, useFieldArray, useWatch, Control, SubmitHandler, useController } from "react-hook-form";
+import { useForm, useFieldArray, Control, SubmitHandler, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { IconPlus, IconTrash, IconPencil, IconFileInvoice, IconAlertTriangle, IconLoader, IconFileDownload, IconFileX } from "@tabler/icons-react";
 import { ColumnDef, Row } from "@tanstack/react-table";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,7 @@ import { NfePreviewModal } from "@/components/nfe-preview-modal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDataStore } from "@/store/data.store";
 import { useAuthStore } from "@/store/auth.store";
-import { Venda, ItemVendido, vendaSchema, Produto, Unidade, CompanyInfo, Cliente } from "@/lib/schemas";
+import { Venda, vendaSchema, Produto, Unidade, CompanyInfo, Cliente } from "@/lib/schemas";
 import { registrarVenda, updateVenda } from "@/lib/services/vendas.services";
 import { emitirNFe } from "@/lib/services/nfe.services";
 import { getCompanyInfo } from "@/lib/services/settings.services";

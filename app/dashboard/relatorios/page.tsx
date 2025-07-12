@@ -24,7 +24,7 @@ import {
 } from "@/lib/services/relatorios.services"
 import { Badge } from "@/components/ui/badge"
 import { useDataStore } from "@/store/data.store"
-import { IconFileTypePdf, IconFileTypeXls } from "@tabler/icons-react"
+import { IconFileTypePdf, IconFileTypeXls, IconX } from "@tabler/icons-react"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -85,6 +85,68 @@ export default function RelatoriosPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { clientes, funcionarios, users, fornecedores, cargos } = useDataStore();
 
+    const handleGenerateReport = useCallback(async () => {
+        if (!date?.from || !date?.to) {
+            return toast.error("Por favor, selecione um período de início e fim.");
+        }
+        setIsLoading(true);
+        setReportData([]);
+        try {
+            const reportFetchers: Record<ReportKey, (d1: Date, d2: Date) => Promise<any[]>> = {
+                vendas: getVendasPorPeriodo, producao: getProducoesPorPeriodo, movimentacoes: getMovimentacoesPorPeriodo,
+                compras: getComprasPorPeriodo, clientes: getClientesPorPeriodo, fornecedores: getFornecedoresPorPeriodo,
+                produtos: getProdutosPorPeriodo, funcionarios: getFuncionariosPorPeriodo, contasAPagar: getContasAPagarPorPeriodo,
+                contasAReceber: getContasAReceberPorPeriodo, despesas: getDespesasPorPeriodo,
+            };
+            const data = await reportFetchers[reportType](date.from, date.to);
+            setReportData(data);
+            if (data.length === 0) toast.info("Nenhum dado encontrado para os filtros selecionados.");
+        } catch (e: any) {
+            console.error(e);
+            toast.error("Erro ao gerar o relatório.", { description: e.message });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [date, reportType]);
+
+    useEffect(() => {
+        try {
+            const savedFilters = localStorage.getItem('reportFilters');
+            if (savedFilters) {
+                const { date: savedDate, category, type } = JSON.parse(savedFilters);
+                if (savedDate && savedDate.from && savedDate.to) {
+                    setDate({ from: new Date(savedDate.from), to: new Date(savedDate.to) });
+                }
+                if (category) setSelectedCategory(category);
+                if (type) setReportType(type);
+            }
+        } catch (error) {
+            console.error("Erro ao carregar filtros:", error);
+            localStorage.removeItem('reportFilters');
+        }
+    }, []);
+
+    useEffect(() => {
+        if (date && selectedCategory && reportType) {
+            localStorage.setItem('reportFilters', JSON.stringify({ date, category: selectedCategory, type: reportType }));
+        }
+    }, [date, selectedCategory, reportType]);
+
+    useEffect(() => {
+        if (date?.from && date?.to) {
+            handleGenerateReport();
+        }
+    }, [date, reportType, handleGenerateReport]);
+
+    const handleClearFilters = () => {
+        setDate(undefined);
+        setSelectedCategory('operacional');
+        setReportType('vendas');
+        setReportData([]);
+        setSearchTerm('');
+        localStorage.removeItem('reportFilters');
+    };
+
     const enrichedData = useMemo((): ReportData[] => {
         if (!reportData.length) return [];
         let dataToEnrich: any[] = reportData;
@@ -114,7 +176,7 @@ export default function RelatoriosPage() {
 
     const availableColumns = useMemo<ColumnDef<ReportData>[]>(() => {
         const dataCol = (field: keyof ReportData, header: string): ColumnDef<ReportData> => ({
-            id: String(field), // Correção: Garantir que o ID seja uma string
+            id: String(field),
             header,
             accessorKey: field,
             cell: (info) => info.getValue() ? format(info.getValue<Date>(), "dd/MM/yyyy") : 'N/A'
@@ -143,27 +205,6 @@ export default function RelatoriosPage() {
             default: return undefined;
         }
     }, [reportType]);
-
-    const handleGenerateReport = async () => {
-        if (!date?.from || !date?.to) { return toast.error("Por favor, selecione um período de início e fim."); }
-        setIsLoading(true); setReportData([]);
-        try {
-            const reportFetchers: Record<ReportKey, (d1: Date, d2: Date) => Promise<any[]>> = {
-                vendas: getVendasPorPeriodo, producao: getProducoesPorPeriodo, movimentacoes: getMovimentacoesPorPeriodo,
-                compras: getComprasPorPeriodo, clientes: getClientesPorPeriodo, fornecedores: getFornecedoresPorPeriodo,
-                produtos: getProdutosPorPeriodo, funcionarios: getFuncionariosPorPeriodo, contasAPagar: getContasAPagarPorPeriodo,
-                contasAReceber: getContasAReceberPorPeriodo, despesas: getDespesasPorPeriodo,
-            };
-            const data = await reportFetchers[reportType](date.from, date.to);
-            setReportData(data);
-            if (data.length === 0) toast.info("Nenhum dado encontrado para os filtros selecionados.");
-        } catch (e: any) {
-            console.error(e);
-            toast.error("Erro ao gerar o relatório.", { description: e.message });
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     useEffect(() => { const initialSelection: Record<string, boolean> = {}; availableColumns.forEach(col => { if (col.id && 'header' in col && typeof col.header === 'string') { initialSelection[col.id] = true; } }); setSelectedColumns(initialSelection); }, [availableColumns]);
     const getExportValue = (row: ReportData, column: ColumnDef<ReportData>): string => { const accessor = 'accessorKey' in column ? column.accessorKey as keyof ReportData : undefined; if(accessor) { const value = (row as any)[accessor]; return String(value ?? ''); } if(column.cell && typeof column.cell === 'function'){ const cellContext = { row: { original: row } } as CellContext<ReportData, unknown>; const renderedOutput = column.cell(cellContext); if (React.isValidElement(renderedOutput)) { const props = renderedOutput.props as { children?: React.ReactNode }; return String(props.children ?? ''); } return String(renderedOutput ?? ''); } return ''; };
@@ -208,7 +249,10 @@ export default function RelatoriosPage() {
                             </Select>
                         </div>
                         <div className="grid gap-2"><Label>Período</Label><DateRangePicker date={date} onDateChange={setDate} /></div>
-                        <Button onClick={handleGenerateReport} disabled={isLoading} className="w-full lg:w-auto">{isLoading ? "Gerando..." : "Gerar Relatório"}</Button>
+                        <div className="flex items-center gap-2">
+                            <Button onClick={handleGenerateReport} disabled={isLoading} className="w-full lg:w-auto">{isLoading ? "Gerando..." : "Gerar Relatório"}</Button>
+                            <Button onClick={handleClearFilters} variant="ghost" size="icon" className="w-full lg:w-auto"><IconX className="h-4 w-4" /></Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>

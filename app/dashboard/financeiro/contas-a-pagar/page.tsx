@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { subscribeToContasAPagar, pagarConta } from "@/lib/services/contasAPagar.services";
 import { DetailsSubRow } from "@/components/details-sub-row";
+import { IconLoader } from "@tabler/icons-react";
 
 interface ContaAPagar {
     id: string;
@@ -38,6 +39,7 @@ export default function ContasAPagarPage() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedConta, setSelectedConta] = useState<ContaAPagar | null>(null);
     const [selectedContaBancaria, setSelectedContaBancaria] = useState<string>("");
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         const unsubContas = subscribeToContasAPagar(setContas);
@@ -55,13 +57,15 @@ export default function ContasAPagarPage() {
             return;
         }
 
+        setIsProcessing(true);
         try {
             await pagarConta(selectedConta, selectedContaBancaria, user);
             toast.success("Conta paga e baixada com sucesso!");
+            setIsDialogOpen(false);
         } catch (error: any) {
             toast.error("Falha ao processar pagamento.", { description: error.message });
         } finally {
-            setIsDialogOpen(false);
+            setIsProcessing(false);
             setSelectedConta(null);
             setSelectedContaBancaria("");
         }
@@ -129,8 +133,11 @@ export default function ContasAPagarPage() {
                          </div>
                     </div>
                     <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                        <Button type="button" onClick={handleConfirmPayment} disabled={!selectedContaBancaria}>Confirmar Pagamento</Button>
+                        <DialogClose asChild><Button type="button" variant="outline" disabled={isProcessing}>Cancelar</Button></DialogClose>
+                        <Button type="button" onClick={handleConfirmPayment} disabled={!selectedContaBancaria || isProcessing}>
+                            {isProcessing && <IconLoader className="mr-2 h-4 w-4 animate-spin" />}
+                            {isProcessing ? "Processando..." : "Confirmar Pagamento"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

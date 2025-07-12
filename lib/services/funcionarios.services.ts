@@ -8,8 +8,8 @@ export const addFuncionario = async (funcionario: Omit<Funcionario, 'id' | 'carg
     const docRef = await addDoc(collection(db, "funcionarios"), dataWithTimestamp);
     return docRef.id;
   } catch (e) {
-    console.error("Erro ao adicionar prestador: ", e);
-    throw new Error("Não foi possível adicionar o prestador.");
+    console.error("Erro ao adicionar funcionário: ", e);
+    throw new Error("Não foi possível adicionar o funcionário.");
   }
 };
 

@@ -55,7 +55,7 @@ export default function FornecedoresPage() {
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isContasModalOpen, setIsContasModalOpen] = useState(false);
     const [selectedFornecedor, setSelectedFornecedor] = useState<Fornecedor | null>(null);
     const isReadOnly = role !== 'ADMINISTRADOR';
@@ -112,21 +112,25 @@ export default function FornecedoresPage() {
         setIsEditing(true);
     };
 
-    const handleStatusActionClick = (id: string) => {
-        setSelectedId(id);
+    const handleStatusActionClick = (ids: string[]) => {
+        setSelectedIds(ids);
         setDialogOpen(true);
     };
 
     const confirmStatusChange = async () => {
-        if (!selectedId) return;
+        if (selectedIds.length === 0) return;
         const newStatus: StatusFiltro = statusFiltro === 'ativo' ? 'inativo' : 'ativo';
         const action = newStatus === 'inativo' ? 'inativar' : 'reativar';
+        const toastId = toast.loading(`${action.charAt(0).toUpperCase() + action.slice(1)}ndo ${selectedIds.length} fornecedor(es)...`);
+
         try {
-            await setFornecedorStatus(selectedId, newStatus);
-            toast.success(`Fornecedor ${action} com sucesso!`);
-        } catch { toast.error(`Erro ao ${action} o fornecedor.`); }
+            await Promise.all(selectedIds.map(id => setFornecedorStatus(id, newStatus)));
+            toast.success(`${selectedIds.length} fornecedor(es) ${action === 'inativar' ? 'inativado(s)' : 'reativado(s)'} com sucesso!`, { id: toastId });
+        } catch {
+            toast.error(`Erro ao ${action} os fornecedores.`, { id: toastId });
+        }
         finally {
-            setSelectedId(null);
+            setSelectedIds([]);
             setDialogOpen(false);
         }
     };
@@ -180,7 +184,7 @@ export default function FornecedoresPage() {
                             statusFiltro === 'ativo' ? (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick(item.id!)}>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick([item.id!])}>
                                             <IconArchive className="h-4 w-4" />
                                         </Button>
                                     </TooltipTrigger>
@@ -189,7 +193,7 @@ export default function FornecedoresPage() {
                             ) : (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick(item.id!)}>
+                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick([item.id!])}>
                                             <IconRefresh className="h-4 w-4" />
                                         </Button>
                                     </TooltipTrigger>
@@ -290,6 +294,13 @@ export default function FornecedoresPage() {
         </div>
     );
 
+    const tableActionsComponent = (selectedFornecedores: Fornecedor[]) => (
+        <Button variant="destructive" size="sm" onClick={() => handleStatusActionClick(selectedFornecedores.map(f => f.id!))}>
+            <IconArchive className="mr-2 h-4 w-4" />
+            Inativar Selecionados
+        </Button>
+    );
+
     return (
         <>
             <ContasDoFornecedorModal />
@@ -298,13 +309,13 @@ export default function FornecedoresPage() {
                 onOpenChange={setDialogOpen}
                 onConfirm={confirmStatusChange}
                 title={`Confirmar ${statusFiltro === 'ativo' ? 'Inativação' : 'Reativação'}`}
-                description={`Tem certeza que deseja ${statusFiltro === 'ativo' ? 'inativar' : 'reativar'} este fornecedor?`}
+                description={`Tem certeza que deseja ${statusFiltro === 'ativo' ? 'inativar' : 'reativar'} ${selectedIds.length} fornecedor(es)?`}
             />
             <CrudLayout
                 formTitle={isEditing ? "Editar Fornecedor" : "Novo Fornecedor"}
                 formContent={formContent}
                 tableTitle="Fornecedores Cadastrados"
-                tableContent={( <GenericTable columns={columns} data={fornecedores} filterPlaceholder="Filtrar por razão social..." filterColumnId="razaoSocial" renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent}/> )}
+                tableContent={( <GenericTable columns={columns} data={fornecedores} filterPlaceholder="Filtrar por razão social..." renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} tableActionsComponent={tableActionsComponent}/> )}
             />
         </>
     );

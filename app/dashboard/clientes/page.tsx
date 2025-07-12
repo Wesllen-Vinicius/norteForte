@@ -63,7 +63,7 @@ export default function ClientesPage() {
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [isFetching, setIsFetching] = useState(false);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
     const { role } = useAuthStore();
@@ -125,23 +125,25 @@ export default function ClientesPage() {
         setIsEditing(true);
     };
 
-    const handleStatusActionClick = (id: string) => {
-        setSelectedId(id);
+    const handleStatusActionClick = (ids: string[]) => {
+        setSelectedIds(ids);
         setDialogOpen(true);
     };
 
     const confirmStatusChange = async () => {
-        if (!selectedId) return;
+        if (selectedIds.length === 0) return;
         const newStatus: StatusFiltro = statusFiltro === 'ativo' ? 'inativo' : 'ativo';
         const action = newStatus === 'inativo' ? 'inativar' : 'reativar';
+        const toastId = toast.loading(`${action.charAt(0).toUpperCase() + action.slice(1)}ndo ${selectedIds.length} cliente(s)...`);
+
         try {
-            await setClienteStatus(selectedId, newStatus);
-            toast.success(`Cliente ${action === 'inativar' ? 'inativado' : 'reativado'} com sucesso!`);
+            await Promise.all(selectedIds.map(id => setClienteStatus(id, newStatus)));
+            toast.success(`${selectedIds.length} cliente(s) ${action === 'inativar' ? 'inativado(s)' : 'reativado(s)'} com sucesso!`, { id: toastId });
         } catch {
-            toast.error(`Erro ao ${action} o cliente.`);
+            toast.error(`Erro ao ${action} os clientes.`, { id: toastId });
         }
         finally {
-            setSelectedId(null);
+            setSelectedIds([]);
             setDialogOpen(false);
         }
     };
@@ -198,14 +200,14 @@ export default function ClientesPage() {
                             statusFiltro === 'ativo' ? (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick(item.id!)}><IconArchive className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleStatusActionClick([item.id!])}><IconArchive className="h-4 w-4" /></Button>
                                     </TooltipTrigger>
                                     <TooltipContent><p>Inativar Cliente</p></TooltipContent>
                                 </Tooltip>
                             ) : (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick(item.id!)}><IconRefresh className="h-4 w-4" /></Button>
+                                        <Button variant="ghost" size="icon" className="text-emerald-500 hover:text-emerald-600" onClick={() => handleStatusActionClick([item.id!])}><IconRefresh className="h-4 w-4" /></Button>
                                     </TooltipTrigger>
                                     <TooltipContent><p>Reativar Cliente</p></TooltipContent>
                                 </Tooltip>
@@ -326,6 +328,13 @@ export default function ClientesPage() {
         </div>
     );
 
+    const tableActionsComponent = (selectedClientes: Cliente[]) => (
+        <Button variant="destructive" size="sm" onClick={() => handleStatusActionClick(selectedClientes.map(c => c.id!))}>
+            <IconArchive className="mr-2 h-4 w-4" />
+            Inativar Selecionados
+        </Button>
+    );
+
     return (
         <>
             <ContasDoClienteModal />
@@ -334,13 +343,13 @@ export default function ClientesPage() {
                 onOpenChange={setDialogOpen}
                 onConfirm={confirmStatusChange}
                 title={`Confirmar ${statusFiltro === 'ativo' ? 'Inativação' : 'Reativação'}`}
-                description={`Tem certeza que deseja ${statusFiltro === 'ativo' ? 'inativar' : 'reativar'} este cliente?`}
+                description={`Tem certeza que deseja ${statusFiltro === 'ativo' ? 'inativar' : 'reativar'} ${selectedIds.length} cliente(s)?`}
             />
             <CrudLayout
                 formTitle={isEditing ? "Editar Cliente" : "Novo Cliente"}
                 formContent={formContent}
                 tableTitle="Clientes Cadastrados"
-                tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." filterColumnId="nome" renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} /> )}
+                tableContent={( <GenericTable columns={columns} data={clientes} filterPlaceholder="Filtrar por nome..." renderSubComponent={renderSubComponent} tableControlsComponent={tableControlsComponent} tableActionsComponent={tableActionsComponent}/> )}
             />
         </>
     );

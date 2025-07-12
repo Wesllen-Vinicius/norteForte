@@ -5,7 +5,7 @@ import { ColumnDef, Row } from "@tanstack/react-table";
 import { format, subDays } from "date-fns";
 import { toast } from "sonner";
 import { DateRange } from "react-day-picker";
-import { IconFileDownload, IconX, IconRefresh, IconFileX, IconAlertTriangle, IconFileCheck, IconClock, IconFileOff } from "@tabler/icons-react";
+import { IconFileDownload, IconX, IconRefresh, IconFileX, IconAlertTriangle, IconFileCheck, IconClock, IconFileOff, IconLoader } from "@tabler/icons-react";
 
 import { useDataStore } from "@/store/data.store";
 import { Venda, CompanyInfo, Cliente, Produto, Unidade } from "@/lib/schemas";
@@ -62,6 +62,7 @@ const StatusCard = ({ title, count, icon: Icon, variant, onClick }: StatusCardPr
 export default function NotasFiscaisPage() {
     const { vendas, clientes, produtos, unidades } = useDataStore();
     const [isCanceling, setIsCanceling] = useState(false);
+    const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
     const [cancelJustificativa, setCancelJustificativa] = useState("");
     const [selectedVenda, setSelectedVenda] = useState<VendaComNFe | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>("todos");
@@ -152,6 +153,7 @@ export default function NotasFiscaisPage() {
             return toast.error("A justificativa de cancelamento deve ter no mínimo 15 caracteres.");
         }
 
+        setIsSubmittingCancel(true);
         const toastId = toast.loading("Enviando solicitação de cancelamento...");
         try {
             const resultado = await cancelarNFe(selectedVenda.nfe.id, cancelJustificativa);
@@ -159,6 +161,7 @@ export default function NotasFiscaisPage() {
             if (resultado.status === 'cancelado') {
                 await updateVenda(selectedVenda.id!, { nfe: { ...selectedVenda.nfe, status: 'cancelado' } });
                 toast.success("NF-e cancelada com sucesso!", { id: toastId });
+                setIsCanceling(false);
             } else {
                 const errorMessage = resultado.erros ? resultado.erros[0].mensagem : (resultado.mensagem_sefaz || 'Falha no cancelamento');
                 toast.error(`Erro: ${errorMessage}`, { id: toastId, duration: 10000 });
@@ -166,7 +169,7 @@ export default function NotasFiscaisPage() {
         } catch (error: any) {
             toast.error("Erro ao cancelar NF-e", { id: toastId, description: error.message });
         } finally {
-            setIsCanceling(false);
+            setIsSubmittingCancel(false);
             setSelectedVenda(null);
             setCancelJustificativa("");
         }
@@ -243,7 +246,13 @@ export default function NotasFiscaisPage() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>Cancelar NF-e</DialogTitle><DialogDescription>Forneça uma justificativa com no mínimo 15 caracteres.</DialogDescription></DialogHeader>
                     <div className="py-4"><Label htmlFor="justificativa">Justificativa</Label><Textarea id="justificativa" value={cancelJustificativa} onChange={(e) => setCancelJustificativa(e.target.value)} placeholder="Ex: Erro na digitação dos itens da nota..." rows={4}/></div>
-                    <DialogFooter><DialogClose asChild><Button type="button" variant="outline">Fechar</Button></DialogClose><Button onClick={handleCancelarNFe}>Confirmar Cancelamento</Button></DialogFooter>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmittingCancel}>Fechar</Button></DialogClose>
+                        <Button onClick={handleCancelarNFe} disabled={isSubmittingCancel}>
+                            {isSubmittingCancel && <IconLoader className="mr-2 h-4 w-4 animate-spin" />}
+                            {isSubmittingCancel ? "Cancelando..." : "Confirmar Cancelamento"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

@@ -1,15 +1,12 @@
-import { db } from "@/lib/firebase";
+import { db, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import {
     collection,
     onSnapshot,
-    doc,
-    updateDoc,
     QuerySnapshot,
     DocumentData,
-    runTransaction,
-    serverTimestamp,
 } from "firebase/firestore";
-import { ContaAReceber, Venda } from "@/lib/schemas";
+import { ContaAReceber } from "@/lib/schemas";
 
 export const subscribeToContasAReceber = (callback: (contas: ContaAReceber[]) => void) => {
   return onSnapshot(collection(db, "contasAReceber"), (querySnapshot: QuerySnapshot<DocumentData>) => {
@@ -22,65 +19,28 @@ export const subscribeToContasAReceber = (callback: (contas: ContaAReceber[]) =>
 };
 
 /**
- * Realiza a baixa de uma conta a receber.
+ * Realiza a baixa de uma conta a receber de forma segura via Cloud Function.
+ * A lógica da transação, como a atualização de saldos e status, agora é executada no servidor.
  * @param conta - O objeto da conta a receber.
  * @param contaBancariaId - O ID da conta bancária onde o valor será creditado.
- * @param user - O usuário que está realizando a operação.
  */
 export const receberPagamento = async (
     conta: ContaAReceber,
-    contaBancariaId: string,
-    user: { uid: string; displayName: string | null }
+    contaBancariaId: string
 ) => {
-    const contaReceberRef = doc(db, "contasAReceber", conta.id);
-    const vendaRef = doc(db, "vendas", conta.vendaId);
-    const contaBancariaRef = doc(db, "contasBancarias", contaBancariaId);
-    const movimentacaoRef = doc(collection(db, "movimentacoesBancarias"));
-
     try {
-        await runTransaction(db, async (transaction) => {
-            const contaBancariaDoc = await transaction.get(contaBancariaRef);
-            if (!contaBancariaDoc.exists()) {
-                throw new Error("Conta bancária não encontrada.");
-            }
+        const receberPagamentoFunction = httpsCallable(functions, 'receberPagamentoHttps');
 
-            const saldoAtual = contaBancariaDoc.data().saldoAtual || 0;
-            const novoSaldo = saldoAtual + conta.valor;
-
-            // 1. Atualiza status da conta a receber para "Recebida"
-            transaction.update(contaReceberRef, { status: "Recebida" });
-
-            // 2. Atualiza status da venda para "Paga"
-            transaction.update(vendaRef, { status: "Paga" });
-
-            // 3. Atualiza o saldo da conta bancária
-            transaction.update(contaBancariaRef, { saldoAtual: novoSaldo });
-
-            // 4. Registra a movimentação de crédito
-            transaction.set(movimentacaoRef, {
-                contaId: contaBancariaId,
-                valor: conta.valor,
-                tipo: 'credito',
-                motivo: `Recebimento da venda ${conta.vendaId.slice(0,5)}`,
-                saldoAnterior: saldoAtual,
-                saldoNovo: novoSaldo,
-                data: serverTimestamp(),
-                registradoPor: {
-                    uid: user.uid,
-                    nome: user.displayName || 'N/A'
-                }
-            });
+        // O UID do usuário que está fazendo a chamada é verificado automaticamente no backend.
+        await receberPagamentoFunction({
+            contaId: conta.id,
+            vendaId: conta.vendaId,
+            contaBancariaId: contaBancariaId,
         });
-    } catch (error) {
-        console.error("Erro na transação de recebimento: ", error);
-        throw error;
+
+    } catch (error: any) {
+        console.error("Erro ao chamar a Cloud Function de receber pagamento: ", error);
+        // Lança o erro para que o componente do frontend possa exibi-lo ao usuário.
+        throw new Error(error.message || "Falha ao processar o recebimento.");
     }
 };
-
-// A função antiga é substituída pela transação completa
-/*
-export const updateStatusContaAReceber = async (id: string, status: 'Pendente' | 'Recebida') => {
-  const contaDocRef = doc(db, "contasAReceber", id);
-  await updateDoc(contaDocRef, { status });
-};
-*/

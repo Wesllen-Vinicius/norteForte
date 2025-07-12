@@ -68,7 +68,7 @@ export function SectionCards({ stats }: SectionCardsProps) {
       </Card>
       <Card>
         <CardHeader>
-          <CardDescription>Prestadores</CardDescription>
+          <CardDescription>Funcionários</CardDescription>
           <CardTitle className="text-2xl font-semibold">{stats.totalFuncionarios}</CardTitle>
         </CardHeader>
         <CardFooter><IconUsers className="size-4 text-muted-foreground" /></CardFooter>
