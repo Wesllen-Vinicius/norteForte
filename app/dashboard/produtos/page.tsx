@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ColumnDef, Row } from "@tanstack/react-table";
-import { IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconAlertTriangle, IconArchive } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Timestamp } from "firebase/firestore";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { DetailsSubRow } from "@/components/details-sub-row";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import {
     Produto,
     produtoVendaSchema,
@@ -40,6 +41,9 @@ export default function ProdutosPage() {
 
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [currentForm, setCurrentForm] = useState<FormType | null>(null);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
 
     const formVenda = useForm<ProdutoVenda>({
         resolver: zodResolver(produtoVendaSchema),
@@ -76,13 +80,23 @@ export default function ProdutosPage() {
         }
     };
 
-    const handleInactivate = async (id: string) => {
-        if (!confirm("Tem certeza que deseja inativar este produto?")) return;
+    const handleInactivateClick = (ids: string[]) => {
+        setSelectedIds(ids);
+        setDialogOpen(true);
+    };
+
+    const confirmInactivation = async () => {
+        if (selectedIds.length === 0) return;
+        const toastId = toast.loading(`Inativando ${selectedIds.length} produto(s)...`);
+
         try {
-            await setProdutoStatus(id, 'inativo');
-            toast.success("Produto inativado com sucesso!");
+            await Promise.all(selectedIds.map(id => setProdutoStatus(id, 'inativo')));
+            toast.success(`${selectedIds.length} produto(s) inativado(s) com sucesso!`, { id: toastId });
         } catch (error) {
-            toast.error("Erro ao inativar o produto.");
+            toast.error("Erro ao inativar os produtos.", { id: toastId });
+        } finally {
+            setSelectedIds([]);
+            setDialogOpen(false);
         }
     };
 
@@ -167,8 +181,8 @@ export default function ProdutosPage() {
                             <IconPencil className="h-4 w-4" />
                         </Button>
                         {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivate(item.id!)}>
-                                <IconTrash className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick([item.id!])}>
+                                <IconArchive className="h-4 w-4" />
                             </Button>
                         )}
                     </div>
@@ -281,6 +295,13 @@ export default function ProdutosPage() {
       </div>
     );
 
+    const tableActionsComponent = (selectedProdutos: Produto[]) => (
+        <Button variant="destructive" size="sm" onClick={() => handleInactivateClick(selectedProdutos.map(p => p.id!))}>
+            <IconArchive className="mr-2 h-4 w-4" />
+            Inativar Selecionados
+        </Button>
+    );
+
     const tableContent = (
         <GenericTable
             columns={columns}
@@ -288,15 +309,25 @@ export default function ProdutosPage() {
             filterPlaceholder="Filtrar por descrição..."
             filterColumnId="nome"
             renderSubComponent={renderSubComponent}
+            tableActionsComponent={tableActionsComponent}
         />
     );
 
     return (
-        <CrudLayout
-            formTitle={isEditing ? "Editar Produto" : "Novo Produto"}
-            formContent={formContent}
-            tableTitle="Produtos Cadastrados"
-            tableContent={tableContent}
-        />
+        <>
+            <ConfirmationDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                onConfirm={confirmInactivation}
+                title={`Confirmar Inativação`}
+                description={`Tem certeza que deseja inativar ${selectedIds.length} produto(s)? Esta ação não pode ser desfeita.`}
+            />
+            <CrudLayout
+                formTitle={isEditing ? "Editar Produto" : "Novo Produto"}
+                formContent={formContent}
+                tableTitle="Produtos Cadastrados"
+                tableContent={tableContent}
+            />
+        </>
     );
 }

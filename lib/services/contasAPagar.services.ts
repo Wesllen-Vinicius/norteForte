@@ -1,4 +1,5 @@
-import { db } from "@/lib/firebase";
+import { db, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import {
     collection,
     onSnapshot,
@@ -33,57 +34,25 @@ export const subscribeToContasAPagar = (callback: (contas: any[]) => void) => {
 };
 
 /**
- * Realiza a baixa de uma conta a pagar.
- * Atualiza o status da conta, debita o valor da conta bancária e registra a movimentação.
+ * Realiza a baixa de uma conta a pagar de forma segura via Cloud Function.
+ * A lógica de transação, como a atualização de saldos e status, agora é executada no servidor.
  * @param conta - O objeto da conta a pagar.
  * @param contaBancariaId - O ID da conta bancária de onde o valor será debitado.
- * @param user - O usuário que está realizando a operação.
  */
-export const pagarConta = async (conta: ContaAPagar, contaBancariaId: string, user: { uid: string, displayName: string | null }) => {
-    const contaPagarRef = doc(db, "contasAPagar", conta.id);
-    const contaBancariaRef = doc(db, "contasBancarias", contaBancariaId);
-    const movimentacaoRef = doc(collection(db, "movimentacoesBancarias"));
-
+export const pagarConta = async (conta: ContaAPagar, contaBancariaId: string) => {
     try {
-        await runTransaction(db, async (transaction) => {
-            const contaBancariaDoc = await transaction.get(contaBancariaRef);
+        const pagarContaFunction = httpsCallable(functions, 'pagarContaHttps');
 
-            if (!contaBancariaDoc.exists()) {
-                throw new Error("Conta bancária não encontrada.");
-            }
-
-            const saldoAtual = contaBancariaDoc.data().saldoAtual || 0;
-            const novoSaldo = saldoAtual - conta.valor;
-
-            // 1. Atualiza o status da conta a pagar
-            transaction.update(contaPagarRef, { status: "Paga" });
-
-            // 2. Se for uma despesa, atualiza o status na coleção de despesas também
-            if (conta.despesaId) {
-                const despesaRef = doc(db, "despesas", conta.despesaId);
-                transaction.update(despesaRef, { status: "Paga" });
-            }
-
-            // 3. Atualiza o saldo da conta bancária
-            transaction.update(contaBancariaRef, { saldoAtual: novoSaldo });
-
-            // 4. Registra a movimentação bancária para o extrato
-            transaction.set(movimentacaoRef, {
-                contaId: contaBancariaId,
-                valor: conta.valor,
-                tipo: 'debito',
-                motivo: `Pagamento de conta: ${conta.id.slice(0,5)}`,
-                saldoAnterior: saldoAtual,
-                saldoNovo: novoSaldo,
-                data: serverTimestamp(),
-                registradoPor: {
-                    uid: user.uid,
-                    nome: user.displayName || 'N/A'
-                }
-            });
+        // O UID do usuário que está fazendo a chamada é verificado automaticamente no backend.
+        await pagarContaFunction({
+            contaId: conta.id,
+            contaBancariaId: contaBancariaId,
+            despesaId: conta.despesaId || null, // Envia o ID da despesa, se houver
         });
-    } catch (error) {
-        console.error("Erro na transação de pagamento: ", error);
-        throw error;
+
+    } catch (error: any) {
+        console.error("Erro ao chamar a Cloud Function de pagar conta: ", error);
+        // Lança o erro para que o componente do frontend possa exibi-lo ao usuário.
+        throw new Error(error.message || "Falha ao processar o pagamento.");
     }
 };
