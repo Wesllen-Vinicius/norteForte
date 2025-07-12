@@ -31,6 +31,8 @@ const getItensNFe = (venda: Venda, todosProdutos: Produto[], todasUnidades: Unid
         const cfop = produtoCompleto.cfop || empresa.configuracaoFiscal.cfop_padrao;
         const cst = produtoCompleto.cest || empresa.configuracaoFiscal.cst_padrao;
         const valorBruto = item.quantidade * item.precoUnitario;
+        const aliquotaIcms = empresa.configuracaoFiscal.aliquota_icms_padrao || 0;
+        const valorIcms = (valorBruto * aliquotaIcms) / 100;
 
         return {
             numero_item: index + 1,
@@ -49,8 +51,8 @@ const getItensNFe = (venda: Venda, todosProdutos: Produto[], todasUnidades: Unid
             icms_situacao_tributaria: cst,
             icms_modalidade_base_calculo: "3",
             icms_base_calculo: parseFloat(valorBruto.toFixed(2)),
-            icms_aliquota: empresa.configuracaoFiscal.aliquota_icms_padrao,
-            icms_valor: 0.00,
+            icms_aliquota: aliquotaIcms,
+            icms_valor: parseFloat(valorIcms.toFixed(2)),
             pis_situacao_tributaria: "07",
             pis_valor: 0.00,
             cofins_situacao_tributaria: "07",
@@ -83,7 +85,6 @@ export async function POST(req: NextRequest) {
             data_emissao: new Date().toISOString(),
             tipo_documento: 1,
             finalidade_emissao: 1,
-            // --- CORREÇÃO APLICADA AQUI ---
             consumidor_final: (cliente.tipoPessoa === 'fisica' || cliente.indicadorInscricaoEstadual === '9') ? 1 : 0,
             presenca_comprador: 1,
             cnpj_emitente: empresa.cnpj.replace(/\D/g, ''),

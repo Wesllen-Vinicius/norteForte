@@ -113,7 +113,7 @@ export default function NotasFiscaisPage() {
         const toastId = toast.loading("Enviando dados para a Sefaz...");
         try {
             const resultado = await emitirNFe(formData.venda, formData.empresa, formData.cliente, formData.todosProdutos, formData.todasUnidades);
-            const nfeUpdateData = { id: resultado.ref, status: resultado.status, url_danfe: resultado.caminho_danfe, url_xml: resultado.caminho_xml_nota_fiscal };
+            const nfeUpdateData = { id: resultado.ref ?? null, status: resultado.status ?? 'erro_desconhecido', url_danfe: resultado.caminho_danfe ?? null, url_xml: resultado.caminho_xml_nota_fiscal ?? null };
             await updateVenda(formData.venda.id!, { nfe: nfeUpdateData });
 
             if (resultado.status === 'autorizado') { toast.success("NF-e autorizada com sucesso!", { id: toastId });
@@ -133,7 +133,7 @@ export default function NotasFiscaisPage() {
         const toastId = toast.loading("Consultando status da NF-e...");
         try {
             const resultado = await consultarNFe(venda.nfe.id);
-            const nfeUpdateData = { id: resultado.ref, status: resultado.status, url_danfe: resultado.caminho_danfe, url_xml: resultado.caminho_xml_nota_fiscal };
+            const nfeUpdateData = { id: resultado.ref ?? venda.nfe.id, status: resultado.status ?? 'erro_desconhecido', url_danfe: resultado.url_danfe ?? null, url_xml: resultado.url_xml ?? null };
             await updateVenda(venda.id!, { nfe: nfeUpdateData });
             toast.success(`Status atualizado: ${resultado.status}`, { id: toastId });
         } catch (error: any) {

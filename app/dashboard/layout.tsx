@@ -20,23 +20,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   if (isMobile) {
     return (
-      <AuthGuard>
-        <DataProvider>
-          <Suspense fallback={null}>
-            <TopLoader />
-            <NavigationEvents />
-          </Suspense>
-          <div className="flex min-h-screen flex-col">
-            <SiteHeader />
-            <main className="flex-1">{children}</main>
-          </div>
-          <Sheet open={isMobileMenuOpen} onOpenChange={toggleMobileMenu}>
-            <SheetContent side="left" className="w-72 p-0 border-r-0">
-              <AppSidebar />
-            </SheetContent>
-          </Sheet>
-        </DataProvider>
-      </AuthGuard>
+      // **INÍCIO DA CORREÇÃO**
+      // O SidebarProvider agora envolve todo o layout mobile
+      <SidebarProvider>
+        <AuthGuard>
+          <DataProvider>
+            <Suspense fallback={null}>
+              <TopLoader />
+              <NavigationEvents />
+            </Suspense>
+            <div className="flex min-h-screen flex-col">
+              <SiteHeader />
+              <main className="flex-1">{children}</main>
+            </div>
+            <Sheet open={isMobileMenuOpen} onOpenChange={toggleMobileMenu}>
+              <SheetContent side="left" className="w-72 p-0 border-r-0">
+                <AppSidebar />
+              </SheetContent>
+            </Sheet>
+          </DataProvider>
+        </AuthGuard>
+      </SidebarProvider>
+      // **FIM DA CORREÇÃO**
     );
   }
 

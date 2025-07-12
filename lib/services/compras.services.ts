@@ -8,6 +8,7 @@ type CompraPayload = Omit<Compra, 'id' | 'createdAt' | 'status'>;
 export const registrarCompra = async (compraData: CompraPayload) => {
   try {
     await runTransaction(db, async (transaction) => {
+      // ETAPA 1: LEITURA DE TODOS OS DOCUMENTOS
       if (!compraData.contaBancariaId) {
         throw new Error("A conta bancária de origem é obrigatória para registrar a compra.");
       }
@@ -15,6 +16,18 @@ export const registrarCompra = async (compraData: CompraPayload) => {
       const contaDoc = await transaction.get(contaRef);
       if (!contaDoc.exists()) throw new Error("Conta bancária de origem não encontrada.");
 
+      const produtoRefs = compraData.itens.map(item => doc(db, "produtos", item.produtoId));
+      const produtoDocs = await Promise.all(produtoRefs.map(ref => transaction.get(ref)));
+
+      // ETAPA 2: VALIDAÇÃO DOS DADOS LIDOS
+      for (let i = 0; i < produtoDocs.length; i++) {
+        const produtoDoc = produtoDocs[i];
+        if (!produtoDoc.exists()) {
+          throw new Error(`Produto "${compraData.itens[i].produtoNome}" não encontrado.`);
+        }
+      }
+
+      // ETAPA 3: OPERAÇÕES DE ESCRITA
       if (compraData.condicaoPagamento === 'A_VISTA') {
         const saldoAtual = contaDoc.data().saldoAtual || 0;
         const novoSaldo = saldoAtual - compraData.valorTotal;
@@ -61,37 +74,39 @@ export const registrarCompra = async (compraData: CompraPayload) => {
         }
       }
 
-      for (const item of compraData.itens) {
-        const produtoDocRef = doc(db, "produtos", item.produtoId);
-        const produtoDoc = await transaction.get(produtoDocRef);
-        if (!produtoDoc.exists()) throw new Error(`Produto "${item.produtoNome}" não encontrado.`);
-
+      for (let i = 0; i < produtoDocs.length; i++) {
+        const produtoDocRef = produtoRefs[i];
+        const produtoDoc = produtoDocs[i];
+        const item = compraData.itens[i];
         const produtoData = produtoDoc.data();
-        const estoqueAtual = produtoData.quantidade || 0;
-        const custoAntigo = produtoData.custoUnitario || 0;
 
-        const valorEstoqueAntigo = estoqueAtual * custoAntigo;
-        const valorNovaCompra = item.quantidade * item.custoUnitario;
-        const novoEstoqueTotal = estoqueAtual + item.quantidade;
+        if (produtoData) { // <-- Correção aqui
+          const estoqueAtual = produtoData.quantidade || 0;
+          const custoAntigo = produtoData.custoUnitario || 0;
 
-        const novoCustoMedio = novoEstoqueTotal > 0
-          ? (valorEstoqueAntigo + valorNovaCompra) / novoEstoqueTotal
-          : item.custoUnitario;
+          const valorEstoqueAntigo = estoqueAtual * custoAntigo;
+          const valorNovaCompra = item.quantidade * item.custoUnitario;
+          const novoEstoqueTotal = estoqueAtual + item.quantidade;
 
-        transaction.update(produtoDocRef, {
-          quantidade: novoEstoqueTotal,
-          custoUnitario: parseFloat(novoCustoMedio.toFixed(2))
-        });
+          const novoCustoMedio = novoEstoqueTotal > 0
+            ? (valorEstoqueAntigo + valorNovaCompra) / novoEstoqueTotal
+            : item.custoUnitario;
 
-        const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
-        transaction.set(movimentacaoDocRef, {
-          produtoId: item.produtoId,
-          produtoNome: item.produtoNome,
-          quantidade: item.quantidade,
-          tipo: 'entrada',
-          motivo: `Compra NF: ${compraData.notaFiscal}`,
-          data: serverTimestamp(),
-        });
+          transaction.update(produtoDocRef, {
+            quantidade: novoEstoqueTotal,
+            custoUnitario: parseFloat(novoCustoMedio.toFixed(2))
+          });
+
+          const movimentacaoDocRef = doc(collection(db, "movimentacoesEstoque"));
+          transaction.set(movimentacaoDocRef, {
+            produtoId: item.produtoId,
+            produtoNome: item.produtoNome,
+            quantidade: item.quantidade,
+            tipo: 'entrada',
+            motivo: `Compra NF: ${compraData.notaFiscal}`,
+            data: serverTimestamp(),
+          });
+        }
       }
     });
   } catch (error) {

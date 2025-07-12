@@ -6,6 +6,8 @@ import {
     signInWithPopup,
     createUserWithEmailAndPassword,
     sendPasswordResetEmail,
+    EmailAuthProvider,
+    reauthenticateWithCredential,
 } from 'firebase/auth';
 import { LoginValues } from '@/lib/schemas';
 
@@ -41,3 +43,12 @@ export const createUserInAuth = async (email: string, password: string): Promise
 export const sendPasswordReset = async (email: string) => {
     return sendPasswordResetEmail(auth, email);
 };
+
+// --- NOVA FUNÇÃO ADICIONADA ---
+export const reauthenticateUser = async (password: string) => {
+    const user = auth.currentUser;
+    if (!user || !user.email) throw new Error("Usuário não encontrado ou sem e-mail associado.");
+
+    const credential = EmailAuthProvider.credential(user.email, password);
+    await reauthenticateWithCredential(user, credential);
+}

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { ColumnDef, Row } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPencil, IconTrash, IconAlertTriangle, IconLock } from "@tabler/icons-react";
 import { Timestamp, Unsubscribe } from "firebase/firestore";
 import { DateRange } from "react-day-picker";
 import Link from "next/link";
@@ -18,17 +18,18 @@ import { GenericTable } from "@/components/generic-table";
 import { Button } from "@/components/ui/button";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { DatePicker } from "@/components/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox } from "@/components/ui/combobox";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { DetailsSubRow } from "@/components/details-sub-row";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Abate, abateSchema } from "@/lib/schemas";
 import { addAbate, updateAbate, setAbateStatus, subscribeToAbatesByDateRange } from "@/lib/services/abates.services";
 import { useAuthStore } from "@/store/auth.store";
 import { useDataStore } from "@/store/data.store";
+import { DatePicker } from "@/components/date-picker";
 
 const formSchema = abateSchema.pick({
     data: true,
@@ -44,6 +45,7 @@ type AbateComDetalhes = Abate & { responsavelNome?: string; registradorNome?: st
 export default function AbatesPage() {
     const { funcionarios, users, compras } = useDataStore();
     const { user, role } = useAuthStore();
+    const isReadOnly = role !== 'ADMINISTRADOR';
 
     const [abates, setAbates] = useState<Abate[]>([]);
     const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -126,10 +128,26 @@ export default function AbatesPage() {
 
                 return (
                     <div className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar}><IconPencil className="h-4 w-4" /></Button>
-                        {role === 'ADMINISTRADOR' && (
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}><IconTrash className="h-4 w-4" /></Button>
-                        )}
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)} disabled={!podeEditar || isReadOnly}>
+                                        <IconPencil className="h-4 w-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Editar Abate</p></TooltipContent>
+                            </Tooltip>
+                            {!isReadOnly && (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleInactivateClick(item.id!)}>
+                                            <IconTrash className="h-4 w-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Inativar Abate</p></TooltipContent>
+                                </Tooltip>
+                            )}
+                        </TooltipProvider>
                     </div>
                 );
             }
@@ -137,6 +155,7 @@ export default function AbatesPage() {
     ];
 
     const handleEdit = (abate: AbateComDetalhes) => {
+      if(isReadOnly) return;
       setEditingId(abate.id!);
       setIsEditing(true);
       form.reset({
@@ -209,35 +228,44 @@ export default function AbatesPage() {
             </AlertDescription>
         </Alert>
       ) : (
-        <GenericForm schema={formSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
-            <div className="space-y-4">
-                <FormField name="compraId" control={form.control} render={({ field }) => (
-                  <FormItem className="flex flex-col"><FormLabel>Vincular Compra de Origem</FormLabel>
-                    <Combobox options={compraOptions} value={field.value} onChange={field.onChange} placeholder="Selecione uma compra..." searchPlaceholder="Buscar por NF ou data..." />
-                  <FormMessage /></FormItem>
-                )} />
-                <FormField name="data" control={form.control} render={({ field }) => (
-                    <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
-                )} />
-                <div className="grid md:grid-cols-2 gap-4">
-                    <FormField name="total" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>Abate Total (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+        <fieldset disabled={isReadOnly} className="disabled:opacity-70">
+            <GenericForm schema={formSchema} onSubmit={onSubmit} formId="abate-form" form={form}>
+                <div className="space-y-4">
+                    <FormField name="compraId" control={form.control} render={({ field }) => (
+                    <FormItem className="flex flex-col"><FormLabel>Vincular Compra de Origem</FormLabel>
+                        <Combobox options={compraOptions} value={field.value} onChange={field.onChange} placeholder="Selecione uma compra..." searchPlaceholder="Buscar por NF ou data..." />
+                    <FormMessage /></FormItem>
                     )} />
-                    <FormField name="condenado" control={form.control} render={({ field }) => (
-                        <FormItem><FormLabel>Condenado (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormField name="data" control={form.control} render={({ field }) => (
+                        <FormItem className="flex flex-col"><FormLabel>Data do Abate</FormLabel><FormControl><DatePicker date={field.value} onDateChange={field.onChange} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <FormField name="total" control={form.control} render={({ field }) => (
+                            <FormItem><FormLabel>Abate Total (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField name="condenado" control={form.control} render={({ field }) => (
+                            <FormItem><FormLabel>Condenado (cabeças)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    </div>
+                    <FormField name="responsavelId" control={form.control} render={({ field }) => (
+                        <FormItem className="flex flex-col"><FormLabel>Responsável pelo abate</FormLabel>
+                        <Combobox options={funcionarioOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." />
+                        <FormMessage /></FormItem>
                     )} />
                 </div>
-                 <FormField name="responsavelId" control={form.control} render={({ field }) => (
-                    <FormItem className="flex flex-col"><FormLabel>Responsável pelo abate</FormLabel>
-                      <Combobox options={funcionarioOptions} value={field.value} onChange={field.onChange} placeholder="Selecione um responsável" searchPlaceholder="Buscar responsável..." />
-                    <FormMessage /></FormItem>
-                  )} />
-            </div>
-            <div className="flex justify-end gap-2 pt-6">
-                {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
-                <Button type="submit" form="abate-form">{isEditing ? "Salvar" : "Registrar"}</Button>
-            </div>
-        </GenericForm>
+                <div className="flex justify-end gap-2 pt-6">
+                    {isEditing && (<Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>)}
+                    <Button type="submit" form="abate-form">{isEditing ? "Salvar" : "Registrar"}</Button>
+                </div>
+            </GenericForm>
+            {isReadOnly && (
+                <Alert variant="destructive" className="mt-6">
+                    <IconLock className="h-4 w-4" />
+                    <AlertTitle>Acesso Restrito</AlertTitle>
+                    <AlertDescription>Apenas administradores podem gerenciar abates.</AlertDescription>
+                </Alert>
+            )}
+        </fieldset>
       )
     );
 
@@ -253,20 +281,18 @@ export default function AbatesPage() {
     );
 
     return (
+      <>
+        <ConfirmationDialog open={dialogOpen} onOpenChange={setDialogOpen} onConfirm={confirmInactivation} title="Confirmar Inativação" description="Esta ação é irreversível e irá inativar o lote de abate."/>
         <CrudLayout
             formTitle={isEditing ? "Editar Registro de Abate" : "Novo Registro"}
             formContent={formContent}
             tableTitle="Histórico de Abates"
             tableContent={
                 isLoading ? (
-                    <div className="space-y-2">
-                        <div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>
-                        {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-                    </div>
-                ) : (
-                    tableContent
-                )
+                    <div className="space-y-2"><div className="flex flex-col md:flex-row gap-4"><Skeleton className="h-10 w-full md:w-sm" /><Skeleton className="h-10 w-[300px]" /></div>{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                ) : ( tableContent )
             }
         />
+      </>
     );
 }
